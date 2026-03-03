@@ -1234,11 +1234,6 @@
 			<div class="radio-body">"{activeRadioMessage.text}"</div>
 		</div>
 	{/if}
-
-	<main>
-		<h1>about</h1>
-		<p>this is the about page.</p>
-	</main>
 </div>
 
 <style>
@@ -1680,18 +1675,6 @@
 	.rich-actions .buy-btn:hover {
 		background: #dc2626 !important;
 		box-shadow: 0 6px 20px rgba(239, 68, 68, 0.5);
-	}
-
-	main {
-		position: absolute;
-		top: 2rem;
-		left: 2rem;
-		z-index: 10;
-		pointer-events: none;
-	}
-
-	main h1, main p {
-		margin: 0;
 	}
 
 	.score-board {

@@ -1,16 +1,27 @@
-import { kv } from '@vercel/kv';
+import Redis from 'ioredis';
 import { env } from '$env/dynamic/private';
 
-const getIsKvConfigured = () => env.KV_REST_API_URL && env.KV_REST_API_TOKEN;
+const REDIS_URL = env.KV_REDIS_URL || env.KV_URL;
+const isRedisConfigured = !!REDIS_URL;
+
+let redis: Redis | null = null;
 const localLimits = new Map<string, number>();
 
+function getRedis() {
+    if (!isRedisConfigured) return null;
+    if (!redis && REDIS_URL) {
+        redis = new Redis(REDIS_URL);
+    }
+    return redis;
+}
+
 /**
- * Distributed rate limiter using Vercel KV
- * Uses Redis TTL to enforce a cooldown across all serverless instances.
- * Falls back to in-memory Map for local development.
+ * Distributed rate limiter using ioredis
  */
 export async function isRateLimited(key: string, cooldownSeconds: number = 30): Promise<boolean> {
-    if (!getIsKvConfigured()) {
+    const client = getRedis();
+    
+    if (!client) {
         const now = Date.now();
         const lastRequest = localLimits.get(key) || 0;
         if (now - lastRequest < cooldownSeconds * 1000) {
@@ -25,13 +36,12 @@ export async function isRateLimited(key: string, cooldownSeconds: number = 30): 
     try {
         // NX: only set if it does not exist
         // EX: set expiration in seconds
-        const result = await kv.set(limitKey, '1', { ex: cooldownSeconds, nx: true });
+        // 'OK' if set, null if already exists
+        const result = await client.set(limitKey, '1', 'EX', cooldownSeconds, 'NX');
         
-        // If result is null, the key already existed (user is rate limited)
         return result === null;
     } catch (e) {
         console.error('Rate limit error:', e);
-        // Fallback: allow request if KV is down to not block legitimate users
         return false;
     }
 }

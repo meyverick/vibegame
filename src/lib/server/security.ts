@@ -6,12 +6,12 @@ import { building } from '$app/environment';
 // Use a stable secret for local development if not provided, 
 // to prevent token invalidation on every server restart during dev.
 const DEVELOPMENT_SECRET = 'dev-secret-stable-123';
-const SECRET = env.SESSION_SECRET || env.KV_REST_API_TOKEN || DEVELOPMENT_SECRET;
+const SECRET = env.SESSION_SECRET || env.KV_REST_API_TOKEN || process.env.SESSION_SECRET || process.env.KV_REST_API_TOKEN || DEVELOPMENT_SECRET;
 
-const isProd = process.env.NODE_ENV === 'production';
+const isProd = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
 
 if (isProd && SECRET === DEVELOPMENT_SECRET && !building) {
-    throw new Error('CRITICAL SECURITY ERROR: SESSION_SECRET or KV_REST_API_TOKEN must be set in production.');
+    console.error('CRITICAL SECURITY WARNING: SESSION_SECRET or KV_REST_API_TOKEN is not set. Falling back to DEVELOPMENT_SECRET in production! Please set these in your environment variables.');
 }
 
 

@@ -112,6 +112,24 @@ export async function addScore(username: string, score: number, message?: string
 }
 
 /**
+ * Reset the entire leaderboard
+ */
+export async function resetLeaderboard(): Promise<void> {
+    const client = getRedis();
+    if (!client) {
+        localLeaderboard = [];
+        return;
+    }
+
+    try {
+        await client.del(LEADERBOARD_KEY);
+    } catch (e) {
+        console.error('Leaderboard reset error:', e);
+        throw e;
+    }
+}
+
+/**
  * Get the current best score
  */
 export async function getBestScore(): Promise<HighScore | null> {

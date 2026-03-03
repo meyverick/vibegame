@@ -18,6 +18,9 @@
 		vy: number;
 		size: number;
 		life: number;
+		effectType: string;
+		color?: string;
+		emoji?: string;
 	}
 
 	let m = $state({ x: 0, y: 0 });
@@ -29,6 +32,7 @@
 	let score = $state(0);
 	let globalBest: LeaderboardEntry | null = $state(null);
 	let showHighScorePrompt = $state(false);
+	let showCustomizer = $state(false);
 	let newHighScoreUsername = $state('');
 	let newHighScoreMessage = $state('');
 	let isSubmitting = $state(false);
@@ -206,21 +210,58 @@
 		safeTimeout(() => (isShaking = false), 500);
 	}
 
+	function unlockSupporter() {
+		settings.isSupporter = true;
+		if (typeof localStorage !== 'undefined') {
+			localStorage.setItem('isSupporter', 'true');
+		}
+	}
+
+	function selectTrailEffect(effect: string) {
+		if (effect !== 'classic' && !settings.isSupporter) return;
+		settings.trailEffect = effect;
+		if (typeof localStorage !== 'undefined') {
+			localStorage.setItem('trailEffect', effect);
+		}
+	}
+
+	function selectTrailColor(color: string) {
+		if (!settings.isSupporter) return;
+		settings.trailColor = color;
+		if (typeof localStorage !== 'undefined') {
+			localStorage.setItem('trailColor', color);
+		}
+	}
+
 	function addParticles() {
 		if (Math.abs(velocity.x) > 1 || Math.abs(velocity.y) > 1) {
 			const id = Math.random();
-			particles = [
-				...particles,
-				{
-					id,
-					x: charPos.x + charSize / 2,
-					y: charPos.y + charSize / 2,
-					vx: -velocity.x * 0.2 + (Math.random() - 0.5),
-					vy: -velocity.y * 0.2 + (Math.random() - 0.5),
-					size: 5 + Math.random() * 10,
-					life: 1
-				}
-			];
+			const effect = settings.trailEffect;
+			
+			let newParticle: Particle = {
+				id,
+				x: charPos.x + charSize / 2,
+				y: charPos.y + charSize / 2,
+				vx: -velocity.x * 0.2 + (Math.random() - 0.5),
+				vy: -velocity.y * 0.2 + (Math.random() - 0.5),
+				size: 5 + Math.random() * 10,
+				life: 1,
+				effectType: effect,
+				color: settings.trailColor
+			};
+
+			if (effect === 'ghost') {
+				newParticle.vx *= 0.1;
+				newParticle.vy *= 0.1;
+				newParticle.size = charSize;
+				newParticle.emoji = playerEmoji;
+			} else if (effect === 'plasma') {
+				newParticle.size *= 1.5;
+			} else if (effect === 'rainbow') {
+				// Color handled in CSS via hue-rotate
+			}
+
+			particles = [...particles, newParticle];
 		}
 	}
 
@@ -481,10 +522,19 @@
 		fetchLeaderboard();
 		startSession();
 		
-		// Load personal best from localStorage
+		// Load persistent data from localStorage
 		if (typeof localStorage !== 'undefined') {
 			const storedPB = localStorage.getItem('personalBest');
 			if (storedPB) personalBest = parseInt(storedPB, 10);
+
+			const storedSupporter = localStorage.getItem('isSupporter');
+			if (storedSupporter === 'true') settings.isSupporter = true;
+
+			const storedTrailColor = localStorage.getItem('trailColor');
+			if (storedTrailColor) settings.trailColor = storedTrailColor;
+
+			const storedTrailEffect = localStorage.getItem('trailEffect');
+			if (storedTrailEffect) settings.trailEffect = storedTrailEffect;
 		}
 
 		const pollInterval = setInterval(fetchLeaderboard, 10000);
@@ -896,8 +946,23 @@
 		{#each particles as p (p.id)}
 			<div
 				class="particle"
-				style="left: {p.x}px; top: {p.y}px; width: {p.size}px; height: {p.size}px; opacity: {p.life};"
-			></div>
+				class:ghost={p.effectType === 'ghost'}
+				class:plasma={p.effectType === 'plasma'}
+				class:rainbow={p.effectType === 'rainbow'}
+				style="
+					left: {p.x}px; 
+					top: {p.y}px; 
+					width: {p.size}px; 
+					height: {p.size}px; 
+					opacity: {p.life};
+					background: {p.effectType === 'classic' ? 'radial-gradient(circle, #ff9d00 0%, #ff4400 100%)' : p.color};
+					--particle-color: {p.color};
+				"
+			>
+				{#if p.effectType === 'ghost'}
+					{p.emoji}
+				{/if}
+			</div>
 		{/each}
 
 		{#each asteroids as ast (ast.id)}
@@ -1023,7 +1088,10 @@
 					</div>
 				</div>
 
-				<button onclick={restart}>Try Again</button>
+				<div class="actions">
+					<button onclick={restart}>Try Again</button>
+					<button class="secondary" onclick={() => showCustomizer = true}>Customize Ship</button>
+				</div>
 			{/if}
 		</div>
 	{/if}
@@ -1053,6 +1121,56 @@
 			</div>
 		{/if}
 	</div>
+
+	{#if showCustomizer}
+		<div class="modal customizer">
+			<h2>Ship Customization</h2>
+			
+			<div class="custom-section">
+				<h3>Trail Effect</h3>
+				<div class="option-grid">
+					<button class:active={settings.trailEffect === 'classic'} onclick={() => selectTrailEffect('classic')}>
+						Classic
+					</button>
+					<button class:active={settings.trailEffect === 'plasma'} class:premium={!settings.isSupporter} onclick={() => selectTrailEffect('plasma')}>
+						Plasma {!settings.isSupporter ? '🔒' : ''}
+					</button>
+					<button class:active={settings.trailEffect === 'ghost'} class:premium={!settings.isSupporter} onclick={() => selectTrailEffect('ghost')}>
+						Ghost {!settings.isSupporter ? '🔒' : ''}
+					</button>
+					<button class:active={settings.trailEffect === 'rainbow'} class:premium={!settings.isSupporter} onclick={() => selectTrailEffect('rainbow')}>
+						Rainbow {!settings.isSupporter ? '🔒' : ''}
+					</button>
+				</div>
+			</div>
+
+			<div class="custom-section">
+				<h3>Trail Color</h3>
+				<div class="color-grid">
+					{#each ['#ff9d00', '#00f2ff', '#10b981', '#f43f5e', '#8b5cf6', '#ffffff'] as c}
+						<button 
+							class="color-btn" 
+							class:active={settings.trailColor === c}
+							class:locked={!settings.isSupporter && c !== '#ff9d00'}
+							style="background: {c};"
+							onclick={() => selectTrailColor(c)}
+							aria-label="Select trail color {c}"
+							title="Select trail color {c}"
+						></button>
+					{/each}
+				</div>
+			</div>
+
+			{#if !settings.isSupporter}
+				<div class="supporter-pitch">
+					<p>Unlock all premium trails and colors!</p>
+					<button class="buy-btn" onclick={unlockSupporter}>Become a Supporter</button>
+				</div>
+			{/if}
+
+			<button class="close-btn" onclick={() => showCustomizer = false}>Close</button>
+		</div>
+	{/if}
 
 	{#if activeRadioMessage}
 		<div class="radio-transmission">
@@ -1106,18 +1224,298 @@
 		filter: blur(2px);
 	}
 
-	@keyframes shake {
-		0% { transform: translate(1px, 1px) rotate(0deg); }
-		10% { transform: translate(-1px, -2px) rotate(-1deg); }
-		20% { transform: translate(-3px, 0px) rotate(1deg); }
-		30% { transform: translate(3px, 2px) rotate(0deg); }
-		40% { transform: translate(1px, -1px) rotate(1deg); }
-		50% { transform: translate(-1px, 2px) rotate(-1deg); }
-		60% { transform: translate(-3px, 1px) rotate(0deg); }
-		70% { transform: translate(3px, 1px) rotate(-1deg); }
-		80% { transform: translate(-1px, -1px) rotate(1deg); }
-		90% { transform: translate(1px, 2px) rotate(0deg); }
-		100% { transform: translate(1px, -2px) rotate(-1deg); }
+	.particle.plasma {
+		filter: blur(4px) brightness(1.5);
+		box-shadow: 0 0 10px var(--particle-color);
+	}
+
+	.particle.ghost {
+		background: transparent !important;
+		font-size: 2rem;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		filter: none;
+	}
+
+	.particle.rainbow {
+		animation: rainbow-cycle 1s linear infinite;
+	}
+
+	@keyframes rainbow-cycle {
+		from { filter: hue-rotate(0deg) blur(2px); }
+		to { filter: hue-rotate(360deg) blur(2px); }
+	}
+
+	.actions {
+		display: flex;
+		gap: 1rem;
+		justify-content: center;
+		margin-top: 1rem;
+	}
+
+	button.secondary {
+		background: rgba(255, 255, 255, 0.1);
+		border: 1px solid white;
+	}
+
+	button.secondary:hover {
+		background: rgba(255, 255, 255, 0.2);
+	}
+
+	.customizer {
+		min-width: 360px;
+		max-width: 550px;
+		background: linear-gradient(145deg, rgba(10, 15, 30, 0.95), rgba(20, 25, 45, 0.98));
+		border: 1px solid rgba(100, 200, 255, 0.2);
+		box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 242, 255, 0.1) inset;
+		animation: modal-enter 0.5s cubic-bezier(0.2, 1, 0.3, 1);
+		border-radius: 1.5rem;
+		padding: 3rem 2.5rem;
+	}
+
+	.customizer h2 {
+		margin-bottom: 2.5rem;
+		font-size: 2.2rem;
+		font-weight: 800;
+		background: linear-gradient(135deg, #ffffff, #00f2ff);
+		-webkit-background-clip: text;
+		-webkit-text-fill-color: transparent;
+		letter-spacing: 3px;
+		text-transform: uppercase;
+		text-shadow: 0 0 30px rgba(0, 242, 255, 0.3);
+	}
+
+	@keyframes modal-enter {
+		from { opacity: 0; transform: translate(-50%, -40%) scale(0.9); filter: blur(10px); }
+		to { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: blur(0); }
+	}
+
+	.modal {
+		position: fixed;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		z-index: 1000;
+		backdrop-filter: blur(25px);
+		text-align: center;
+	}
+
+	.custom-section {
+		margin-bottom: 2.5rem;
+		text-align: left;
+		background: rgba(0, 0, 0, 0.3);
+		padding: 1.5rem;
+		border-radius: 1rem;
+		border: 1px solid rgba(255, 255, 255, 0.05);
+	}
+
+	.custom-section h3 {
+		font-size: 0.85rem;
+		text-transform: uppercase;
+		letter-spacing: 3px;
+		color: #94a3b8;
+		margin-bottom: 1.2rem;
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
+	.custom-section h3::before {
+		content: '';
+		width: 8px;
+		height: 8px;
+		background: #00f2ff;
+		border-radius: 50%;
+		box-shadow: 0 0 10px #00f2ff;
+	}
+
+	.custom-section h3::after {
+		content: '';
+		flex: 1;
+		height: 1px;
+		background: linear-gradient(to right, rgba(0,242,255,0.3), transparent);
+	}
+
+	.option-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 1rem;
+	}
+
+	.option-grid button {
+		margin: 0;
+		padding: 1rem 0.5rem;
+		font-size: 1rem;
+		font-weight: 600;
+		background: rgba(255, 255, 255, 0.02);
+		border: 1px solid rgba(255, 255, 255, 0.05);
+		border-radius: 0.75rem;
+		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+		color: #94a3b8;
+		position: relative;
+		overflow: hidden;
+		letter-spacing: 1px;
+		text-transform: uppercase;
+	}
+
+	.option-grid button:not(.locked):hover {
+		background: rgba(0, 242, 255, 0.05);
+		border-color: rgba(0, 242, 255, 0.3);
+		color: #fff;
+		transform: translateY(-2px);
+		box-shadow: 0 10px 20px -10px rgba(0, 242, 255, 0.2);
+	}
+
+	.option-grid button.active {
+		background: rgba(0, 242, 255, 0.1);
+		border-color: #00f2ff;
+		color: #fff;
+		box-shadow: 0 0 20px rgba(0, 242, 255, 0.2), inset 0 0 10px rgba(0, 242, 255, 0.1);
+		text-shadow: 0 0 10px rgba(0, 242, 255, 0.5);
+	}
+
+	.option-grid button.active::before {
+		content: '';
+		position: absolute;
+		top: 0; left: 0; width: 4px; height: 100%;
+		background: #00f2ff;
+		box-shadow: 0 0 15px #00f2ff;
+	}
+
+	.option-grid button.premium {
+		opacity: 0.5;
+	}
+
+	.color-grid {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 1.2rem;
+		justify-content: center;
+		padding: 0.5rem 0;
+	}
+
+	.color-btn {
+		width: 48px;
+		height: 48px;
+		border-radius: 50%;
+		border: 2px solid rgba(255, 255, 255, 0.1);
+		padding: 0;
+		margin: 0;
+		cursor: pointer;
+		transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+		position: relative;
+		box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+	}
+
+	.color-btn:not(.locked):hover {
+		transform: scale(1.2);
+		border-color: rgba(255, 255, 255, 0.8);
+		box-shadow: 0 0 15px var(--particle-color);
+	}
+
+	.color-btn.active {
+		border-color: #fff;
+		border-width: 3px;
+		transform: scale(1.25);
+		box-shadow: 0 0 25px var(--particle-color), inset 0 0 10px rgba(255,255,255,0.5);
+	}
+
+	.color-btn.locked {
+		opacity: 0.2;
+		cursor: not-allowed;
+		filter: grayscale(1);
+	}
+
+	.color-btn.locked::after {
+		content: '🔒';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		font-size: 1.2rem;
+		text-shadow: 0 2px 5px rgba(0,0,0,0.9);
+	}
+
+	.supporter-pitch {
+		background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 140, 0, 0.15));
+		padding: 2rem;
+		border-radius: 1rem;
+		border: 1px solid rgba(255, 215, 0, 0.3);
+		margin-top: 1rem;
+		margin-bottom: 2rem;
+		position: relative;
+		overflow: hidden;
+		box-shadow: 0 10px 30px rgba(255, 215, 0, 0.1);
+	}
+
+	.supporter-pitch::before {
+		content: '';
+		position: absolute;
+		top: -50%; left: -50%; width: 200%; height: 200%;
+		background: conic-gradient(from 0deg, transparent 0deg, rgba(255,215,0,0.2) 90deg, transparent 180deg);
+		animation: radar-sweep 4s linear infinite;
+		pointer-events: none;
+	}
+
+	@keyframes radar-sweep {
+		from { transform: rotate(0deg); }
+		to { transform: rotate(360deg); }
+	}
+
+	.supporter-pitch p {
+		font-size: 1.1rem;
+		color: #fff;
+		margin-bottom: 1.5rem;
+		position: relative;
+		z-index: 1;
+		font-weight: 600;
+		text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+		letter-spacing: 1px;
+	}
+
+	.buy-btn {
+		width: 100%;
+		background: linear-gradient(to right, #ffd700, #ff8c00) !important;
+		color: #000 !important;
+		margin: 0 !important;
+		font-weight: 800;
+		font-size: 1.1rem;
+		letter-spacing: 2px;
+		text-transform: uppercase;
+		box-shadow: 0 5px 20px rgba(255, 215, 0, 0.4);
+		position: relative;
+		z-index: 1;
+		transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+		border-radius: 0.75rem;
+		padding: 1.2rem;
+	}
+
+	.buy-btn:hover {
+		transform: translateY(-3px) scale(1.02);
+		box-shadow: 0 10px 30px rgba(255, 215, 0, 0.6);
+		background: linear-gradient(to right, #ffdf00, #ff9d00) !important;
+	}
+
+	.close-btn {
+		width: 100%;
+		background: rgba(255, 255, 255, 0.05) !important;
+		border: 1px solid rgba(255, 255, 255, 0.1) !important;
+		color: #94a3b8 !important;
+		margin: 0 !important;
+		border-radius: 0.75rem;
+		padding: 1rem;
+		font-weight: 600;
+		letter-spacing: 2px;
+		text-transform: uppercase;
+		transition: all 0.3s;
+	}
+
+	.close-btn:hover {
+		background: rgba(239, 68, 68, 0.1) !important;
+		border-color: rgba(239, 68, 68, 0.5) !important;
+		color: #ef4444 !important;
+		box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
 	}
 
 	main {

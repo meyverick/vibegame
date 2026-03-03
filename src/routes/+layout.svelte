@@ -213,16 +213,6 @@
 		align-items: center;
 	}
 
-	.settings-panel input[type="number"] {
-		width: 50px;
-		background: rgba(0, 0, 0, 0.3);
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		color: white;
-		border-radius: 4px;
-		padding: 2px 4px;
-		text-align: center;
-	}
-
 	.checkbox-label {
 		cursor: pointer;
 		justify-content: flex-start !important;

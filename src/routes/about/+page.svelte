@@ -12,7 +12,24 @@
 	/** @type {number[]} */
 	let lastScores = $state([]);
 	let gameOver = $state(false);
+	const deathMessages = [
+		'Forgot to pay the gravity bill.',
+		'Spilled space coffee on the dashboard.',
+		'Quantum sneezing fit.',
+		'Ran into a celestial parking ticket.',
+		'Physics engine took a lunch break.',
+		'Mistook a black hole for a shortcut.',
+		'GPS: Recalculating... infinitely.',
+		'You are now 100% pasta.'
+	];
+	let currentDeathMessage = $state(deathMessages[0]);
+
 	let isShaking = $state(false);
+
+	// Velocity magnitude for panic emoji
+	let velocityMagnitude = $derived(Math.sqrt(velocity.x ** 2 + velocity.y ** 2));
+	let playerEmoji = $derived(velocityMagnitude > 15 ? '😱' : '🚀');
+
 	/** @type {any[]} */
 	let particles = $state([]);
 	let mobilityBoostLevel = $state(0);
@@ -21,12 +38,31 @@
 		y: -100,
 		active: false
 	});
+
 	let hasShield = $state(false);
 	let shieldBonus = $state({
 		x: -100,
 		y: -100,
 		active: false
 	});
+
+	let taxCollector = $state({
+		x: -100,
+		y: -100,
+		active: false,
+		vx: 0,
+		vy: 0
+	});
+
+	let taxedPopup = $state({
+		active: false,
+		x: 0,
+		y: 0,
+		timer: 0,
+		text: 'TAXED!'
+	});
+
+	const junkEmojis = ['🚽', '🍌', '🛋️', '📦', '🪑'];
 
 	let satellite = $state({
 		x: 200,
@@ -43,7 +79,8 @@
 			y: -150,
 			speed: 6 + Math.random() * 8,
 			vx: (Math.random() - 0.5) * 4,
-			angle: 0
+			angle: 0,
+			type: '☄️'
 		}
 	]);
 
@@ -132,6 +169,42 @@
 				}))
 				.filter((p) => p.life > 0);
 
+			if (taxedPopup.active) {
+				taxedPopup.timer -= 1;
+				if (taxedPopup.timer <= 0) taxedPopup.active = false;
+			}
+
+			// Tax Collector Spawning (randomly every ~10 seconds)
+			if (!taxCollector.active && Math.random() < 0.002) {
+				const side = Math.floor(Math.random() * 4);
+				if (typeof window !== 'undefined') {
+					if (side === 0) { taxCollector.x = Math.random() * window.innerWidth; taxCollector.y = -50; }
+					else if (side === 1) { taxCollector.x = window.innerWidth + 50; taxCollector.y = Math.random() * window.innerHeight; }
+					else if (side === 2) { taxCollector.x = Math.random() * window.innerWidth; taxCollector.y = window.innerHeight + 50; }
+					else { taxCollector.x = -50; taxCollector.y = Math.random() * window.innerHeight; }
+					taxCollector.active = true;
+				}
+			}
+
+			if (taxCollector.active) {
+				const dx = charPos.x - taxCollector.x;
+				const dy = charPos.y - taxCollector.y;
+				const angle = Math.atan2(dy, dx);
+				taxCollector.vx += Math.cos(angle) * 0.1;
+				taxCollector.vy += Math.sin(angle) * 0.1;
+				taxCollector.vx *= 0.98;
+				taxCollector.vy *= 0.98;
+				taxCollector.x += taxCollector.vx;
+				taxCollector.y += taxCollector.vy;
+
+				// Despawn if too far away
+				if (typeof window !== 'undefined') {
+					if (taxCollector.x < -200 || taxCollector.x > window.innerWidth + 200 || taxCollector.y < -200 || taxCollector.y > window.innerHeight + 200) {
+						taxCollector.active = false;
+					}
+				}
+			}
+
 			if (Math.abs(velocity.x) > 0.5 || Math.abs(velocity.y) > 0.5) {
 				addParticles();
 			}
@@ -212,6 +285,7 @@
 					m.x = Math.random() * window.innerWidth;
 					m.vx = (Math.random() - 0.5) * 6;
 					m.speed = 6 + Math.random() * 8;
+					m.type = Math.random() < 0.05 ? junkEmojis[Math.floor(Math.random() * junkEmojis.length)] : '☄️';
 				}
 			});
 
@@ -276,6 +350,7 @@
 						}));
 			
 												meteorites[0].x = Math.random() * (window.innerWidth - 100) + 50;
+												meteorites[0].type = '☄️';
 												spawnMobilityBonus();
 												spawnShieldBonus();
 											}
@@ -318,11 +393,52 @@
 		shieldBonus.active = true;
 	}
 
+	// Spaghettification effect: stretch based on proximity to warp vortex
+	let spaghettiScale = $derived.by(() => {
+		const dxW = warp.x - (charPos.x + charSize / 2);
+		const dyW = warp.y - (charPos.y + charSize / 2);
+		const distW = Math.sqrt(dxW * dxW + dyW * dyW);
+		
+		if (distW < 300) {
+			const stretch = 1 + (300 - distW) / 50;
+			return `scale(${stretch}, ${1 / Math.sqrt(stretch)})`;
+		}
+		return 'scale(1, 1)';
+	});
+
 	function checkCollisions() {
 		if (typeof window === 'undefined' || gameOver) return;
 		
 		const charCenterX = charPos.x + charSize / 2;
 		const charCenterY = charPos.y + charSize / 2;
+
+		// Check Tax Collector collision
+		if (taxCollector.active) {
+			const dx = charCenterX - (taxCollector.x + 30);
+			const dy = charCenterY - (taxCollector.y + 30);
+			const dist = Math.sqrt(dx * dx + dy * dy);
+			if (dist < 40) {
+				taxCollector.active = false;
+				triggerShake();
+				
+				if (hasShield) {
+					hasShield = false;
+					setTimeout(spawnShieldBonus, 3000);
+					taxedPopup.active = true;
+					taxedPopup.text = 'BLOCKED!';
+					taxedPopup.x = charPos.x;
+					taxedPopup.y = charPos.y;
+					taxedPopup.timer = 120;
+				} else {
+					score = Math.floor(score / 2);
+					taxedPopup.active = true;
+					taxedPopup.text = 'TAXED!';
+					taxedPopup.x = charPos.x;
+					taxedPopup.y = charPos.y;
+					taxedPopup.timer = 120;
+				}
+			}
+		}
 
 		const handleDeath = () => {
 			if (hasShield) {
@@ -333,6 +449,7 @@
 				return true;
 			}
 			gameOver = true;
+			currentDeathMessage = deathMessages[Math.floor(Math.random() * deathMessages.length)];
 			if (lastScores[0] !== score || lastScores.length === 0) {
 				lastScores = [score, ...lastScores].slice(0, 3);
 			}
@@ -421,7 +538,8 @@
 							y: -200,
 							speed: 7 + Math.random() * 10,
 							vx: (Math.random() - 0.5) * 6,
-							angle: 0
+							angle: 0,
+							type: '☄️'
 						});
 					}
 
@@ -451,6 +569,8 @@
 		mobilityBoostLevel = 0;
 		hasShield = false;
 		shieldBonus.active = false;
+		taxCollector.active = false;
+		taxedPopup.active = false;
 		spawnMobilityBonus();
 		spawnShieldBonus();
 		satellite = {
@@ -466,7 +586,8 @@
 			y: -150,
 			speed: 6 + Math.random() * 8,
 			vx: (Math.random() - 0.5) * 6,
-			angle: 0
+			angle: 0,
+			type: '☄️'
 		}];
 	}
 
@@ -543,11 +664,11 @@
 		<div class="gravity-field" style="width: 3072px; height: 3072px;"></div>
 	</div>
 
-	<div class="character" class:hyper={mobilityBoostLevel > 0} style="left: {charPos.x}px; top: {charPos.y}px; transform: rotate({rotation}deg); filter: drop-shadow(0 0 {10 + mobilityBoostLevel * 5}px #00f2ff) hue-rotate({mobilityBoostLevel * 45}deg);">
+	<div class="character" class:hyper={mobilityBoostLevel > 0} style="left: {charPos.x}px; top: {charPos.y}px; transform: rotate({rotation}deg) {spaghettiScale}; filter: drop-shadow(0 0 {10 + mobilityBoostLevel * 5}px #00f2ff) hue-rotate({mobilityBoostLevel * 45}deg);">
 		{#if hasShield}
 			<div class="shield-effect"></div>
 		{/if}
-		🚀
+		{playerEmoji}
 	</div>
 
 	{#if mobilityBonus.active}
@@ -568,14 +689,29 @@
 
 	{#each meteorites as m (m.id)}
 		<div class="falling-asteroid" style="left: {m.x}px; top: {m.y}px; transform: rotate({m.angle}deg);">
-			☄️
+			{m.type || '☄️'}
+			{#if m.type && m.type !== '☄️'}
+				<div class="junk-label">Celestial Clutter</div>
+			{/if}
 		</div>
 	{/each}
+
+	{#if taxCollector.active}
+		<div class="tax-collector" style="left: {taxCollector.x}px; top: {taxCollector.y}px;">
+			🕴️
+		</div>
+	{/if}
+
+	{#if taxedPopup.active}
+		<div class="taxed-popup" style="left: {taxedPopup.x}px; top: {taxedPopup.y}px; opacity: {taxedPopup.timer / 120}; color: {taxedPopup.text === 'BLOCKED!' ? '#10b981' : '#ff4444'};">
+			{taxedPopup.text}
+		</div>
+	{/if}
 
 	{#if gameOver}
 		<div class="game-over">
 			<h1>GAME OVER</h1>
-			<p>You crashed!</p>
+			<p>{currentDeathMessage}</p>
 			<button onclick={restart}>Try Again</button>
 		</div>
 	{/if}
@@ -852,6 +988,50 @@
 		user-select: none;
 		pointer-events: none;
 		filter: drop-shadow(0 0 20px rgba(255, 68, 68, 0.6));
+	}
+
+	.junk-label {
+		position: absolute;
+		top: -20px;
+		left: 50%;
+		transform: translateX(-50%);
+		font-size: 0.8rem;
+		color: #ff4444;
+		white-space: nowrap;
+		background: rgba(0, 0, 0, 0.5);
+		padding: 2px 6px;
+		border-radius: 4px;
+	}
+
+	.tax-collector {
+		position: fixed;
+		font-size: 4rem;
+		z-index: 145;
+		user-select: none;
+		pointer-events: none;
+		filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.4));
+		animation: collector-wobble 2s ease-in-out infinite;
+	}
+
+	@keyframes collector-wobble {
+		0%, 100% { transform: scale(1) rotate(0deg); }
+		50% { transform: scale(1.1) rotate(5deg); }
+	}
+
+	.taxed-popup {
+		position: fixed;
+		font-size: 2rem;
+		font-weight: bold;
+		color: #ff4444;
+		z-index: 300;
+		pointer-events: none;
+		text-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+		animation: taxed-float 2s forwards;
+	}
+
+	@keyframes taxed-float {
+		0% { transform: translate(-50%, 0); }
+		100% { transform: translate(-50%, -100px); }
 	}
 
 	.game-over {

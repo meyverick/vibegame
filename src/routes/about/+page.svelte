@@ -9,6 +9,14 @@
 	let velocity = $state({ x: 0, y: 0 });
 	let rotation = $state(0);
 	let score = $state(0);
+	/** @type {any} */
+	let globalBest = $state(null);
+	let showHighScorePrompt = $state(false);
+	let newHighScoreUsername = $state('');
+	let isSubmitting = $state(false);
+	let sessionToken = $state('');
+	let statusMessage = $state('');
+
 	/** @type {number[]} */
 	let lastScores = $state([]);
 	let gameOver = $state(false);
@@ -332,7 +340,63 @@
 		requestAnimationFrame(update);
 	}
 
+	async function fetchLeaderboard() {
+		try {
+			const res = await fetch('/api/leaderboard');
+			const data = await res.json();
+			if (data && data.length > 0) {
+				globalBest = data[0];
+			}
+		} catch (e) {
+			console.error('Failed to fetch leaderboard:', e);
+		}
+	}
+
+	async function startSession() {
+		try {
+			const res = await fetch('/api/leaderboard/session');
+			const data = await res.json();
+			sessionToken = data.token;
+		} catch (e) {
+			console.error('Failed to start session:', e);
+		}
+	}
+
+	async function submitHighScore() {
+		if (!newHighScoreUsername.trim() || isSubmitting) return;
+		isSubmitting = true;
+		statusMessage = '';
+		try {
+			const res = await fetch('/api/leaderboard', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					username: newHighScoreUsername,
+					score: score,
+					token: sessionToken
+				})
+			});
+			
+			const data = await res.json();
+			
+			if (res.ok) {
+				showHighScorePrompt = false;
+				await fetchLeaderboard();
+			} else {
+				statusMessage = data.error || 'Submission failed';
+			}
+		} catch (e) {
+			statusMessage = 'Network error';
+			console.error('Failed to submit score:', e);
+		} finally {
+			isSubmitting = false;
+		}
+	}
+
 	onMount(() => {
+		fetchLeaderboard();
+		startSession();
+		const pollInterval = setInterval(fetchLeaderboard, 10000);
 		// Initialize positions based on screen size
 		if (typeof window !== 'undefined') {
 			charPos = { x: window.innerWidth * 0.2, y: window.innerHeight * 0.2 };
@@ -355,7 +419,10 @@
 												spawnShieldBonus();
 											}
 														const frame = requestAnimationFrame(update);
-		return () => cancelAnimationFrame(frame);
+		return () => {
+			cancelAnimationFrame(frame);
+			clearInterval(pollInterval);
+		};
 	});
 
 	function spawnAsteroid() {
@@ -450,6 +517,12 @@
 			}
 			gameOver = true;
 			currentDeathMessage = deathMessages[Math.floor(Math.random() * deathMessages.length)];
+			
+			// Check for global high score
+			if (!globalBest || score > globalBest.score) {
+				showHighScorePrompt = true;
+			}
+
 			if (lastScores[0] !== score || lastScores.length === 0) {
 				lastScores = [score, ...lastScores].slice(0, 3);
 			}
@@ -566,6 +639,9 @@
 		velocity = { x: 0, y: 0 };
 		score = 0;
 		gameOver = false;
+		showHighScorePrompt = false;
+		statusMessage = '';
+		startSession();
 		mobilityBoostLevel = 0;
 		hasShield = false;
 		shieldBonus.active = false;
@@ -710,9 +786,29 @@
 
 	{#if gameOver}
 		<div class="game-over">
-			<h1>GAME OVER</h1>
-			<p>{currentDeathMessage}</p>
-			<button onclick={restart}>Try Again</button>
+			{#if showHighScorePrompt}
+				<h1 class="new-record">NEW GALAXY RECORD!</h1>
+				<p>Your score of {score} is the best in the universe.</p>
+				<div class="input-group">
+					<input 
+						type="text" 
+						bind:value={newHighScoreUsername} 
+						placeholder="Enter your pilot name"
+						maxlength="20"
+						disabled={isSubmitting}
+					/>
+					{#if statusMessage}
+						<p class="error-text">{statusMessage}</p>
+					{/if}
+					<button onclick={submitHighScore} disabled={isSubmitting || !newHighScoreUsername.trim()}>
+						{isSubmitting ? 'TRANSMITTING...' : 'REGISTER SCORE'}
+					</button>
+				</div>
+			{:else}
+				<h1>GAME OVER</h1>
+				<p>{currentDeathMessage}</p>
+				<button onclick={restart}>Try Again</button>
+			{/if}
 		</div>
 	{/if}
 
@@ -727,6 +823,9 @@
 
 	<div class="score-board">
 		<div class="current-score">Score: {score}</div>
+		{#if globalBest}
+			<div class="global-best">Best: {globalBest.score} ({globalBest.username})</div>
+		{/if}
 		{#if mobilityBoostLevel > 0}
 			<div class="boost-level" style="color: #00f2ff;">Boost: x{mobilityBoostLevel}</div>
 		{/if}
@@ -811,6 +910,57 @@
 		font-weight: bold;
 		color: #ffd700;
 		text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+	}
+
+	.global-best {
+		font-size: 1.2rem;
+		color: #10b981;
+		font-weight: bold;
+		text-transform: uppercase;
+		letter-spacing: 1px;
+	}
+
+	.new-record {
+		color: #ffd700 !important;
+		animation: pulse-gold 2s infinite;
+	}
+
+	@keyframes pulse-gold {
+		0%, 100% { text-shadow: 0 0 10px #ffd700; }
+		50% { text-shadow: 0 0 30px #ffd700; }
+	}
+
+	.input-group {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		margin-top: 1.5rem;
+	}
+
+	input {
+		padding: 0.75rem 1rem;
+		font-size: 1.2rem;
+		background: rgba(255, 255, 255, 0.1);
+		border: 1px solid rgba(255, 255, 255, 0.3);
+		border-radius: 0.5rem;
+		color: white;
+		text-align: center;
+		outline: none;
+		transition: border-color 0.2s;
+	}
+
+	input:focus {
+		border-color: #ffd700;
+	}
+
+	input:disabled {
+		opacity: 0.5;
+	}
+
+	.error-text {
+		color: #ef4444;
+		font-size: 0.9rem;
+		margin: 0;
 	}
 
 	.last-tries {

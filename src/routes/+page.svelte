@@ -5,11 +5,25 @@
 	let rocket = $state({ x: 0, y: 0, vx: 0, vy: 0 });
 	let isGameOver = $state(false);
 	let animationFrame: number;
+	
+	let globalBest = $state<{username: string, score: number} | null>(null);
 
 	/** @param {PointerEvent} e */
 	function handlePointerMove(e: PointerEvent) {
 		m.x = e.clientX;
 		m.y = e.clientY;
+	}
+
+	async function fetchLeaderboard() {
+		try {
+			const res = await fetch('/api/leaderboard');
+			const data = await res.json();
+			if (data && data.length > 0) {
+				globalBest = data[0];
+			}
+		} catch (e) {
+			console.error('Failed to fetch leaderboard:', e);
+		}
 	}
 
 	function resetGame() {
@@ -21,6 +35,7 @@
 	}
 
 	onMount(() => {
+		fetchLeaderboard();
 		resetGame();
 
 		let lastTime = performance.now();
@@ -73,6 +88,15 @@
 <svelte:window onpointermove={handlePointerMove} />
 
 <main class:game-over={isGameOver}>
+	<div class="leaderboard-preview">
+		{#if globalBest}
+			<span class="best-label">TOP PILOT:</span> 
+			<span class="best-value">{globalBest.username} ({globalBest.score})</span>
+		{:else}
+			<span class="best-label">NO RECORDS YET</span>
+		{/if}
+	</div>
+
 	<div 
 		class="rocket" 
 		style="left: {rocket.x}px; top: {rocket.y}px; transform: translate(-50%, -50%) rotate({rocketAngle}deg);"
@@ -91,6 +115,7 @@
 			home
 		</h1>
 		<p>the gravity well is pulling you in.</p>
+		<a href="/about" class="play-link">ENTER MISSION SECTOR ➔</a>
 	{/if}
 </main>
 
@@ -106,6 +131,30 @@
 		overflow: hidden;
 		background: #020617;
 		color: #f8fafc;
+	}
+
+	.leaderboard-preview {
+		position: fixed;
+		top: 1rem;
+		right: 1rem;
+		background: rgba(255, 255, 255, 0.05);
+		padding: 0.5rem 1rem;
+		border-radius: 2rem;
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		backdrop-filter: blur(5px);
+		z-index: 50;
+	}
+
+	.best-label {
+		font-size: 0.7rem;
+		color: #94a3b8;
+		margin-right: 0.5rem;
+		letter-spacing: 1px;
+	}
+
+	.best-value {
+		font-weight: bold;
+		color: #10b981;
 	}
 
 	.game-over {
@@ -148,7 +197,7 @@
 		pointer-events: none;
 	}
 
-	button {
+	button, .play-link {
 		margin-top: 2rem;
 		padding: 0.75rem 2rem;
 		font-size: 1.25rem;
@@ -158,9 +207,11 @@
 		border-radius: 0.5rem;
 		cursor: pointer;
 		transition: all 0.2s;
+		text-decoration: none;
+		display: inline-block;
 	}
 
-	button:hover {
+	button:hover, .play-link:hover {
 		background: #dc2626;
 		transform: scale(1.05);
 	}

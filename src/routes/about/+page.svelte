@@ -33,6 +33,8 @@
 	let globalBest: LeaderboardEntry | null = $state(null);
 	let showHighScorePrompt = $state(false);
 	let showCustomizer = $state(false);
+	let showRichModal = $state(false);
+	let showNothingModal = $state(false);
 	let newHighScoreUsername = $state('');
 	let newHighScoreMessage = $state('');
 	let isSubmitting = $state(false);
@@ -92,13 +94,16 @@
 		pendingTimeouts = [];
 	}
 
-	// Velocity magnitude for panic emoji
+	// Velocity magnitude for logic
 	let velocityMagnitude = $derived(Math.sqrt(velocity.x ** 2 + velocity.y ** 2));
+	
+	// The ship should evolve based on the current run's score OR the all-time local best
+	let effectiveBest = $derived(Math.max(score, personalBest));
+	
 	let playerEmoji = $derived.by(() => {
-		if (velocityMagnitude > 15) return '😱';
-		if (personalBest >= 1500) return '👾';
-		if (personalBest >= 750) return '🛰️';
-		if (personalBest >= 250) return '🛸';
+		if (effectiveBest >= 1500) return '👾';
+		if (effectiveBest >= 750) return '🛰️';
+		if (effectiveBest >= 250) return '🛸';
 		return '🚀';
 	});
 
@@ -215,6 +220,24 @@
 		if (typeof localStorage !== 'undefined') {
 			localStorage.setItem('isSupporter', 'true');
 		}
+	}
+
+	function handleBuyClick() {
+		showRichModal = true;
+	}
+
+	function redirectToPaypal() {
+		unlockSupporter();
+		// Ko-fi redirect for the purchase in new tab
+		window.open('https://ko-fi.com/meyverick', '_blank');
+		showRichModal = false;
+	}
+
+	function redirectToDonation() {
+		unlockSupporter();
+		// Ko-fi redirect for donation in new tab
+		window.open('https://ko-fi.com/meyverick', '_blank');
+		showNothingModal = false;
 	}
 
 	function selectTrailEffect(effect: string) {
@@ -1124,51 +1147,84 @@
 
 	{#if showCustomizer}
 		<div class="modal customizer">
-			<h2>Ship Customization</h2>
+			<div class="customizer-header">
+				<h2>Ship Customization</h2>
+			</div>
 			
-			<div class="custom-section">
-				<h3>Trail Effect</h3>
-				<div class="option-grid">
-					<button class:active={settings.trailEffect === 'classic'} onclick={() => selectTrailEffect('classic')}>
-						Classic
-					</button>
-					<button class:active={settings.trailEffect === 'plasma'} class:premium={!settings.isSupporter} onclick={() => selectTrailEffect('plasma')}>
-						Plasma {!settings.isSupporter ? '🔒' : ''}
-					</button>
-					<button class:active={settings.trailEffect === 'ghost'} class:premium={!settings.isSupporter} onclick={() => selectTrailEffect('ghost')}>
-						Ghost {!settings.isSupporter ? '🔒' : ''}
-					</button>
-					<button class:active={settings.trailEffect === 'rainbow'} class:premium={!settings.isSupporter} onclick={() => selectTrailEffect('rainbow')}>
-						Rainbow {!settings.isSupporter ? '🔒' : ''}
-					</button>
+			<div class="customizer-content">
+				<div class="custom-section">
+					<h3>Trail Effect</h3>
+					<div class="option-grid">
+						<button class:active={settings.trailEffect === 'classic'} onclick={() => selectTrailEffect('classic')}>
+							Classic
+						</button>
+						<button class:active={settings.trailEffect === 'plasma'} class:premium={!settings.isSupporter} onclick={() => selectTrailEffect('plasma')}>
+							Plasma {!settings.isSupporter ? '🔒' : ''}
+						</button>
+						<button class:active={settings.trailEffect === 'ghost'} class:premium={!settings.isSupporter} onclick={() => selectTrailEffect('ghost')}>
+							Ghost {!settings.isSupporter ? '🔒' : ''}
+						</button>
+						<button class:active={settings.trailEffect === 'rainbow'} class:premium={!settings.isSupporter} onclick={() => selectTrailEffect('rainbow')}>
+							Rainbow {!settings.isSupporter ? '🔒' : ''}
+						</button>
+					</div>
 				</div>
+
+				<div class="custom-section">
+					<h3>Trail Color</h3>
+					<div class="color-grid">
+						{#each ['#ff9d00', '#00f2ff', '#10b981', '#f43f5e', '#8b5cf6', '#ffffff'] as c}
+							<button 
+								class="color-btn" 
+								class:active={settings.trailColor === c}
+								class:locked={!settings.isSupporter && c !== '#ff9d00'}
+								style="background: {c}; --particle-color: {c};"
+								onclick={() => selectTrailColor(c)}
+								aria-label="Select trail color {c}"
+								title="Select trail color {c}"
+							></button>
+						{/each}
+					</div>
+				</div>
+
+				{#if !settings.isSupporter}
+					<div class="supporter-pitch">
+						<p>Unlock all premium trails and colors for $12,000!</p>
+						<button class="buy-btn" onclick={handleBuyClick}>Become a Supporter</button>
+					</div>
+				{:else}
+					<div class="supporter-pitch bought">
+						<p>You are a Supporter! ✨</p>
+						<button class="buy-btn secondary-gold" onclick={() => showNothingModal = true}>Buy it again!</button>
+					</div>
+				{/if}
 			</div>
 
-			<div class="custom-section">
-				<h3>Trail Color</h3>
-				<div class="color-grid">
-					{#each ['#ff9d00', '#00f2ff', '#10b981', '#f43f5e', '#8b5cf6', '#ffffff'] as c}
-						<button 
-							class="color-btn" 
-							class:active={settings.trailColor === c}
-							class:locked={!settings.isSupporter && c !== '#ff9d00'}
-							style="background: {c};"
-							onclick={() => selectTrailColor(c)}
-							aria-label="Select trail color {c}"
-							title="Select trail color {c}"
-						></button>
-					{/each}
-				</div>
+			<div class="customizer-footer">
+				<button class="close-btn" onclick={() => showCustomizer = false}>Close</button>
 			</div>
+		</div>
+	{/if}
 
-			{#if !settings.isSupporter}
-				<div class="supporter-pitch">
-					<p>Unlock all premium trails and colors!</p>
-					<button class="buy-btn" onclick={unlockSupporter}>Become a Supporter</button>
-				</div>
-			{/if}
+	{#if showNothingModal}
+		<div class="modal rich-confirmation">
+			<h2 class="warning-title">⚠️ WASTE ADVISORY</h2>
+			<p class="warning-text">You'll get nothing more!</p>
+			<div class="rich-actions">
+				<button class="buy-btn" onclick={redirectToDonation}>I know that!</button>
+				<button class="close-btn" onclick={() => showNothingModal = false}>Actually, maybe once is enough</button>
+			</div>
+		</div>
+	{/if}
 
-			<button class="close-btn" onclick={() => showCustomizer = false}>Close</button>
+	{#if showRichModal}
+		<div class="modal rich-confirmation">
+			<h2 class="warning-title">⚠️ SYSTEM ADVISORY</h2>
+			<p class="warning-text">I don't know if it works, take it at your own risk!</p>
+			<div class="rich-actions">
+				<button class="buy-btn" onclick={redirectToPaypal}>I know, I'm just too rich!</button>
+				<button class="close-btn" onclick={() => showRichModal = false}>Wait, I'm actually sensible</button>
+			</div>
 		</div>
 	{/if}
 
@@ -1264,26 +1320,71 @@
 	}
 
 	.customizer {
-		min-width: 360px;
-		max-width: 550px;
-		background: linear-gradient(145deg, rgba(10, 15, 30, 0.95), rgba(20, 25, 45, 0.98));
+		min-width: 280px;
+		width: 90%;
+		max-width: 500px;
+		max-height: 85vh;
+		display: flex;
+		flex-direction: column;
+		background: linear-gradient(145deg, rgba(10, 15, 30, 0.98), rgba(20, 25, 45, 0.98));
 		border: 1px solid rgba(100, 200, 255, 0.2);
 		box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 242, 255, 0.1) inset;
 		animation: modal-enter 0.5s cubic-bezier(0.2, 1, 0.3, 1);
 		border-radius: 1.5rem;
-		padding: 3rem 2.5rem;
+		padding: 0;
+		overflow: hidden;
+	}
+
+	.customizer-header {
+		padding: 1.5rem 1.5rem 0.5rem;
+		flex-shrink: 0;
+	}
+
+	.customizer-content {
+		padding: 0 1.5rem;
+		overflow-y: auto;
+		flex-grow: 1;
+		scrollbar-width: thin;
+		scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+	}
+
+	.customizer-footer {
+		padding: 1rem 1.5rem 1.5rem;
+		flex-shrink: 0;
+		background: rgba(0, 0, 0, 0.2);
+		border-top: 1px solid rgba(255, 255, 255, 0.05);
+	}
+
+	.customizer-content::-webkit-scrollbar {
+		width: 6px;
+	}
+
+	.customizer-content::-webkit-scrollbar-thumb {
+		background: rgba(255, 255, 255, 0.2);
+		border-radius: 3px;
 	}
 
 	.customizer h2 {
-		margin-bottom: 2.5rem;
-		font-size: 2.2rem;
+		margin: 0;
+		font-size: 1.5rem;
 		font-weight: 800;
 		background: linear-gradient(135deg, #ffffff, #00f2ff);
 		-webkit-background-clip: text;
 		-webkit-text-fill-color: transparent;
-		letter-spacing: 3px;
+		letter-spacing: 2px;
 		text-transform: uppercase;
 		text-shadow: 0 0 30px rgba(0, 242, 255, 0.3);
+	}
+
+	@media (max-width: 600px) {
+		.customizer {
+			max-height: 95vh;
+			border-radius: 1rem;
+		}
+		.customizer h2 { font-size: 1.2rem; }
+		.custom-section { padding: 1rem; }
+		.option-grid { gap: 0.5rem; }
+		.color-btn { width: 36px; height: 36px; }
 	}
 
 	@keyframes modal-enter {
@@ -1302,20 +1403,20 @@
 	}
 
 	.custom-section {
-		margin-bottom: 2.5rem;
+		margin-bottom: 1.5rem;
 		text-align: left;
 		background: rgba(0, 0, 0, 0.3);
-		padding: 1.5rem;
+		padding: 1.25rem;
 		border-radius: 1rem;
 		border: 1px solid rgba(255, 255, 255, 0.05);
 	}
 
 	.custom-section h3 {
-		font-size: 0.85rem;
+		font-size: 0.8rem;
 		text-transform: uppercase;
-		letter-spacing: 3px;
+		letter-spacing: 2px;
 		color: #94a3b8;
-		margin-bottom: 1.2rem;
+		margin-bottom: 1rem;
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
@@ -1439,11 +1540,11 @@
 
 	.supporter-pitch {
 		background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 140, 0, 0.15));
-		padding: 2rem;
+		padding: 1.25rem;
 		border-radius: 1rem;
 		border: 1px solid rgba(255, 215, 0, 0.3);
-		margin-top: 1rem;
-		margin-bottom: 2rem;
+		margin-top: 0.5rem;
+		margin-bottom: 1.5rem;
 		position: relative;
 		overflow: hidden;
 		box-shadow: 0 10px 30px rgba(255, 215, 0, 0.1);
@@ -1464,7 +1565,7 @@
 	}
 
 	.supporter-pitch p {
-		font-size: 1.1rem;
+		font-size: 1rem;
 		color: #fff;
 		margin-bottom: 1.5rem;
 		position: relative;
@@ -1480,7 +1581,7 @@
 		color: #000 !important;
 		margin: 0 !important;
 		font-weight: 800;
-		font-size: 1.1rem;
+		font-size: 1rem;
 		letter-spacing: 2px;
 		text-transform: uppercase;
 		box-shadow: 0 5px 20px rgba(255, 215, 0, 0.4);
@@ -1488,13 +1589,24 @@
 		z-index: 1;
 		transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 		border-radius: 0.75rem;
-		padding: 1.2rem;
+		padding: 1rem;
 	}
 
 	.buy-btn:hover {
 		transform: translateY(-3px) scale(1.02);
 		box-shadow: 0 10px 30px rgba(255, 215, 0, 0.6);
 		background: linear-gradient(to right, #ffdf00, #ff9d00) !important;
+	}
+
+	.buy-btn.secondary-gold {
+		background: rgba(255, 215, 0, 0.1) !important;
+		border: 1px solid #ffd700 !important;
+		color: #ffd700 !important;
+		box-shadow: none;
+	}
+
+	.buy-btn.secondary-gold:hover {
+		background: rgba(255, 215, 0, 0.2) !important;
 	}
 
 	.close-btn {
@@ -1504,11 +1616,12 @@
 		color: #94a3b8 !important;
 		margin: 0 !important;
 		border-radius: 0.75rem;
-		padding: 1rem;
+		padding: 0.75rem;
 		font-weight: 600;
 		letter-spacing: 2px;
 		text-transform: uppercase;
 		transition: all 0.3s;
+		cursor: pointer;
 	}
 
 	.close-btn:hover {
@@ -1516,6 +1629,56 @@
 		border-color: rgba(239, 68, 68, 0.5) !important;
 		color: #ef4444 !important;
 		box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+	}
+
+	.rich-confirmation {
+		min-width: 300px;
+		max-width: 420px;
+		background: linear-gradient(145deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.98));
+		border: 2px solid #ef4444;
+		box-shadow: 0 0 40px rgba(239, 68, 68, 0.2), 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+		padding: 2.5rem;
+		animation: modal-enter 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+	}
+
+	.warning-title {
+		color: #ef4444 !important;
+		font-size: 1.25rem !important;
+		font-weight: 800 !important;
+		margin-bottom: 1.5rem !important;
+		letter-spacing: 3px !important;
+		text-transform: uppercase;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.75rem;
+	}
+
+	.warning-text {
+		font-size: 1rem;
+		line-height: 1.6;
+		color: #cbd5e1;
+		margin-bottom: 2.5rem;
+		padding: 1rem;
+		background: rgba(0, 0, 0, 0.2);
+		border-radius: 0.75rem;
+		border: 1px solid rgba(255, 255, 255, 0.05);
+	}
+
+	.rich-actions {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.rich-actions .buy-btn {
+		background: #ef4444 !important;
+		box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+	}
+
+	.rich-actions .buy-btn:hover {
+		background: #dc2626 !important;
+		box-shadow: 0 6px 20px rgba(239, 68, 68, 0.5);
 	}
 
 	main {
@@ -1659,7 +1822,7 @@
 
 	.character {
 		position: fixed;
-		font-size: 3rem;
+		font-size: 4rem;
 		z-index: 20;
 		user-select: none;
 		pointer-events: none;

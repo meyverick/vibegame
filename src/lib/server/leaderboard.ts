@@ -139,7 +139,7 @@ export async function resetLeaderboardIfInactive(): Promise<boolean> {
         const isActive = await client.exists(LAST_UPDATE_KEY);
         
         if (!isActive) {
-            console.log('Inactivity threshold reached (3h). Resetting leaderboard.');
+            console.log('Inactivity threshold reached (24h). Resetting leaderboard.');
             await client.del(LEADERBOARD_KEY);
             return true;
         }

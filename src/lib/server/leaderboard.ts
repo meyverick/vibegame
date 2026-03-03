@@ -10,21 +10,30 @@ export interface HighScore {
 
 const LEADERBOARD_KEY = 'leaderboard';
 
-// Support Vercel KV (REST) or RedisLabs (Redis Protocol)
-const REDIS_URL = env.KV_REDIS_URL || env.KV_URL;
-const isRedisConfigured = !!REDIS_URL || (env.KV_REST_API_URL && env.KV_REST_API_TOKEN);
-
 let redis: Redis | null = null;
 let localLeaderboard: HighScore[] = [];
 
 function getRedis() {
-    if (!isRedisConfigured) return null;
-    if (!redis) {
-        if (REDIS_URL) {
-            redis = new Redis(REDIS_URL);
-        }
+    if (redis) return redis;
+
+    // Use SvelteKit env first, then process.env as fallback
+    const url = env.KV_REDIS_URL || env.KV_URL || process.env.KV_REDIS_URL || process.env.KV_URL;
+    const restUrl = env.KV_REST_API_URL || process.env.KV_REST_API_URL;
+    const restToken = env.KV_REST_API_TOKEN || process.env.KV_REST_API_TOKEN;
+
+    if (url) {
+        console.log('Connecting to Redis via URL...');
+        redis = new Redis(url);
+        return redis;
     }
-    return redis;
+
+    if (restUrl && restToken) {
+        // Note: ioredis doesn't support Vercel KV REST directly, 
+        // but this block is for future-proofing or if using a Redis Proxy.
+        // For now, we prefer the redis:// protocol.
+    }
+
+    return null;
 }
 
 /**
@@ -33,9 +42,10 @@ function getRedis() {
 export async function getLeaderboard(): Promise<HighScore[]> {
     const client = getRedis();
     if (!client) {
+        console.warn('Leaderboard: Redis not configured, using local in-memory fallback.');
         return localLeaderboard.slice(0, 10);
     }
-
+...
     try {
         const data = await client.zrevrange(LEADERBOARD_KEY, 0, 9, 'WITHSCORES');
         

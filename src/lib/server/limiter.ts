@@ -1,18 +1,18 @@
 import Redis from 'ioredis';
 import { env } from '$env/dynamic/private';
 
-const REDIS_URL = env.KV_REDIS_URL || env.KV_URL;
-const isRedisConfigured = !!REDIS_URL;
-
 let redis: Redis | null = null;
 const localLimits = new Map<string, number>();
 
 function getRedis() {
-    if (!isRedisConfigured) return null;
-    if (!redis && REDIS_URL) {
-        redis = new Redis(REDIS_URL);
+    if (redis) return redis;
+
+    const url = env.KV_REDIS_URL || env.KV_URL || process.env.KV_REDIS_URL || process.env.KV_URL;
+    if (url) {
+        redis = new Redis(url);
+        return redis;
     }
-    return redis;
+    return null;
 }
 
 /**
@@ -21,7 +21,7 @@ function getRedis() {
  */
 export async function isRateLimited(key: string, cooldownSeconds: number = 30): Promise<boolean> {
     const client = getRedis();
-    
+...
     if (!client) {
         const now = Date.now();
         const lastRequest = localLimits.get(key) || 0;

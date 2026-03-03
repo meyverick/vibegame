@@ -16,7 +16,7 @@ export const GET: RequestHandler = async () => {
  * Submit new score
  */
 export const POST: RequestHandler = async ({ request, getClientAddress }) => {
-    const { username, score, token } = await request.json();
+    const { username, score, token, message } = await request.json();
     
     // 1. Basic validation
     if (!username || typeof username !== 'string' || typeof score !== 'number' || !token) {
@@ -46,6 +46,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
         return json({ error: 'Username must be 3-20 alphanumeric characters' }, { status: 400 });
     }
     
-    const updatedLeaderboard = await db.addScore(sanitizedUsername, score);
+    // Message is optional and sanitized in db.addScore
+    const updatedLeaderboard = await db.addScore(sanitizedUsername, score, message);
     return json({ success: true, leaderboard: updatedLeaderboard });
 };

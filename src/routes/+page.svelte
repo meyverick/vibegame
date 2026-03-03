@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { settings } from '$lib/settings.svelte';
 
 	let m = $state({ x: 0, y: 0 });
 	let rocket = $state({ x: 0, y: 0, vx: 0, vy: 0 });
@@ -46,6 +47,7 @@
 			animationFrame = requestAnimationFrame(tick);
 
 			const deltaTime = currentTime - lastTime;
+			const interval = 1000 / settings.fps;
 
 			if (deltaTime < interval) {
 				return;

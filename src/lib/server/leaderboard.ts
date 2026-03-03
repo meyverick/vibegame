@@ -5,6 +5,7 @@ export interface HighScore {
     username: string;
     score: number;
     timestamp: number;
+    message?: string;
 }
 
 const LEADERBOARD_KEY = 'leaderboard';
@@ -19,8 +20,6 @@ let localLeaderboard: HighScore[] = [];
 function getRedis() {
     if (!isRedisConfigured) return null;
     if (!redis) {
-        // Use Redis URL if available (RedisLabs), otherwise we'd need @vercel/kv for REST.
-        // Since we are moving to ioredis, we assume a redis:// protocol URL.
         if (REDIS_URL) {
             redis = new Redis(REDIS_URL);
         }
@@ -38,8 +37,6 @@ export async function getLeaderboard(): Promise<HighScore[]> {
     }
 
     try {
-        // Get top 10 members with their scores
-        // ZREVRANGE returns members from highest to lowest score
         const data = await client.zrevrange(LEADERBOARD_KEY, 0, 9, 'WITHSCORES');
         
         const leaderboard: HighScore[] = [];
@@ -47,11 +44,15 @@ export async function getLeaderboard(): Promise<HighScore[]> {
             const member = data[i];
             const score = parseInt(data[i + 1], 10);
             
-            const [username, timestampStr] = member.split(':');
+            // Format: username:timestamp:base64Message
+            const [username, timestampStr, messageBase64] = member.split(':');
+            const message = messageBase64 ? Buffer.from(messageBase64, 'base64').toString('utf-8') : undefined;
+            
             leaderboard.push({
                 username,
                 score,
-                timestamp: parseInt(timestampStr, 10)
+                timestamp: parseInt(timestampStr, 10),
+                message
             });
         }
         
@@ -65,13 +66,19 @@ export async function getLeaderboard(): Promise<HighScore[]> {
 /**
  * Add a new score to the leaderboard
  */
-export async function addScore(username: string, score: number): Promise<HighScore[]> {
+export async function addScore(username: string, score: number, message?: string): Promise<HighScore[]> {
     const client = getRedis();
+    
+    // Sanitize message: limit length and remove newlines
+    const sanitizedMessage = message ? message.trim().substring(0, 100).replace(/[\r\n]/g, ' ') : undefined;
+    const messageBase64 = sanitizedMessage ? Buffer.from(sanitizedMessage).toString('base64') : '';
+
     if (!client) {
         const newEntry: HighScore = {
             username,
             score,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            message: sanitizedMessage
         };
         localLeaderboard = [...localLeaderboard, newEntry]
             .sort((a, b) => b.score - a.score)
@@ -81,12 +88,10 @@ export async function addScore(username: string, score: number): Promise<HighSco
 
     try {
         const timestamp = Date.now();
-        const member = `${username}:${timestamp}`;
+        // Format: username:timestamp:base64Message
+        const member = `${username}:${timestamp}:${messageBase64}`;
         
-        // Add to Sorted Set
         await client.zadd(LEADERBOARD_KEY, score, member);
-        
-        // Keep top 100
         await client.zremrangebyrank(LEADERBOARD_KEY, 0, -101);
         
         return getLeaderboard();

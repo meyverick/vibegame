@@ -17,6 +17,7 @@ function getRedis() {
 
 /**
  * Distributed rate limiter using ioredis
+ * Fixed: Failed attempts no longer reset the cooldown timer.
  */
 export async function isRateLimited(key: string, cooldownSeconds: number = 30): Promise<boolean> {
     const client = getRedis();
@@ -24,9 +25,13 @@ export async function isRateLimited(key: string, cooldownSeconds: number = 30): 
     if (!client) {
         const now = Date.now();
         const lastRequest = localLimits.get(key) || 0;
+        
+        // If we are still in cooldown, return true without updating the timestamp
         if (now - lastRequest < cooldownSeconds * 1000) {
             return true;
         }
+        
+        // Cooldown passed, set new timestamp and allow
         localLimits.set(key, now);
         return false;
     }
@@ -34,12 +39,17 @@ export async function isRateLimited(key: string, cooldownSeconds: number = 30): 
     const limitKey = `limit:${key}`;
     
     try {
-        // NX: only set if it does not exist
-        // EX: set expiration in seconds
-        // 'OK' if set, null if already exists
-        const result = await client.set(limitKey, '1', 'EX', cooldownSeconds, 'NX');
+        // Check if key exists first
+        const exists = await client.exists(limitKey);
         
-        return result === null;
+        if (exists) {
+            // Already limited, do not reset the TTL
+            return true;
+        }
+        
+        // Not limited, set the key with expiration
+        await client.set(limitKey, '1', 'EX', cooldownSeconds);
+        return false;
     } catch (e) {
         console.error('Rate limit error:', e);
         return false;

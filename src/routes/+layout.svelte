@@ -1,6 +1,7 @@
 <script lang="ts">
 	import favicon from '$lib/assets/favicon.svg';
 	import sign from '../images/sign.png';
+	import { settings } from '$lib/settings.svelte';
 
 	interface DustParticle {
 		id: number;
@@ -21,7 +22,7 @@
 
 	/** @param {PointerEvent} e */
 	function handlePointerMove(e: PointerEvent) {
-		if (Math.random() > 0.3) return; // Limit density
+		if (!settings.showBackground || Math.random() > 0.3) return; // Limit density and respect settings
 		const id = Math.random();
 		dustParticles = [
 			...dustParticles,
@@ -43,6 +44,11 @@
 
 	// Particle animation loop
 	$effect(() => {
+		if (!settings.showBackground) {
+			dustParticles = [];
+			return;
+		}
+		
 		const interval = setInterval(() => {
 			dustParticles = dustParticles
 				.map(p => ({
@@ -80,19 +86,38 @@
 			<nav class="dropdown-menu">
 				<a href="/" onclick={() => isMenuOpen = false}>home</a>
 				<a href="/about" onclick={() => isMenuOpen = false}>about</a>
+				<div class="menu-divider"></div>
+				<div class="settings-panel">
+					<label title="Frames Per Second">
+						<span>Target FPS</span>
+						<input type="number" bind:value={settings.fps} min="10" max="240" step="1" />
+					</label>
+					<label class="checkbox-label">
+						<input type="checkbox" bind:checked={settings.showBackground} />
+						<span>Show Background</span>
+					</label>
+					<label class="checkbox-label">
+						<input type="checkbox" bind:checked={settings.enableShake} />
+						<span>Enable Screen Shake</span>
+					</label>
+				</div>
 			</nav>
 		{/if}
 	</header>
-	<div class="stars-layer-1"></div>
-	<div class="stars-layer-2"></div>
-	<div class="stars-layer-3"></div>
-	<div class="nebula"></div>
-	<div class="artifacts">
-		<div class="artifact planet"></div>
-		<div class="artifact spiral"></div>
-		<div class="constellation constellation-1"></div>
-		<div class="constellation constellation-2"></div>
-	</div>
+
+	{#if settings.showBackground}
+		<div class="stars-layer-1"></div>
+		<div class="stars-layer-2"></div>
+		<div class="stars-layer-3"></div>
+		<div class="nebula"></div>
+		<div class="artifacts">
+			<div class="artifact planet"></div>
+			<div class="artifact spiral"></div>
+			<div class="constellation constellation-1"></div>
+			<div class="constellation constellation-2"></div>
+		</div>
+	{/if}
+
 	<div class="vignette"></div>
 	<div class="content">
 		{@render children()}
@@ -167,8 +192,49 @@
 		padding: 0.5rem;
 		display: flex;
 		flex-direction: column;
-		min-width: 120px;
+		min-width: 200px;
 		box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+	}
+
+	.menu-divider {
+		height: 1px;
+		background: rgba(255, 255, 255, 0.1);
+		margin: 0.5rem 0;
+	}
+
+	.settings-panel {
+		padding: 0.75rem 1rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		color: rgba(255, 255, 255, 0.7);
+		font-size: 0.85rem;
+	}
+
+	.settings-panel label {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+
+	.settings-panel input[type="number"] {
+		width: 50px;
+		background: rgba(0, 0, 0, 0.3);
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		color: white;
+		border-radius: 4px;
+		padding: 2px 4px;
+		text-align: center;
+	}
+
+	.checkbox-label {
+		cursor: pointer;
+		justify-content: flex-start !important;
+		gap: 0.5rem;
+	}
+
+	.checkbox-label:hover {
+		color: white;
 	}
 
 	.dropdown-menu a {

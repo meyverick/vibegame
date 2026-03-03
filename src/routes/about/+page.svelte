@@ -1,4 +1,5 @@
 <script lang="ts">
+	/** Version: 1.0.1 - Triggering fresh deploy */
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { settings } from '$lib/settings.svelte';

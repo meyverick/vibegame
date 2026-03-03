@@ -9,6 +9,8 @@ export interface HighScore {
 }
 
 const LEADERBOARD_KEY = 'leaderboard';
+const LAST_UPDATE_KEY = 'leaderboard:last_update';
+const RESET_THRESHOLD_SECONDS = 60 * 60 * 3; // 3 hours
 
 let redis: Redis | null = null;
 let localLeaderboard: HighScore[] = [];
@@ -97,12 +99,21 @@ export async function addScore(username: string, score: number, message?: string
     }
 
     try {
+        const leaderboard = await getLeaderboard();
+        const isNewTopScore = leaderboard.length === 0 || score > leaderboard[0].score;
+
         const timestamp = Date.now();
         // Format: username:timestamp:base64Message
         const member = `${username}:${timestamp}:${messageBase64}`;
         
         await client.zadd(LEADERBOARD_KEY, score, member);
         await client.zremrangebyrank(LEADERBOARD_KEY, 0, -101);
+
+        // If this is a new top score, reset the 3-hour timer
+        if (isNewTopScore) {
+            console.log('New top score! Resetting the 3-hour inactivity timer.');
+            await client.set(LAST_UPDATE_KEY, 'active', 'EX', RESET_THRESHOLD_SECONDS);
+        }
         
         return getLeaderboard();
     } catch (e) {
@@ -112,19 +123,25 @@ export async function addScore(username: string, score: number, message?: string
 }
 
 /**
- * Reset the entire leaderboard
+ * Reset the entire leaderboard if it has been inactive for > 3 hours
  */
-export async function resetLeaderboard(): Promise<void> {
+export async function resetLeaderboardIfInactive(): Promise<boolean> {
     const client = getRedis();
-    if (!client) {
-        localLeaderboard = [];
-        return;
-    }
+    if (!client) return false;
 
     try {
-        await client.del(LEADERBOARD_KEY);
+        // Check if the timer key exists
+        const isActive = await client.exists(LAST_UPDATE_KEY);
+        
+        if (!isActive) {
+            console.log('Inactivity threshold reached (3h). Resetting leaderboard.');
+            await client.del(LEADERBOARD_KEY);
+            return true;
+        }
+        
+        return false;
     } catch (e) {
-        console.error('Leaderboard reset error:', e);
+        console.error('Leaderboard inactivity check error:', e);
         throw e;
     }
 }

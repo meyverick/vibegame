@@ -17,9 +17,12 @@ export const GET: RequestHandler = async ({ request, url }) => {
     }
 
     try {
-        await db.resetLeaderboard();
-        console.log('Leaderboard successfully reset via scheduled task.');
-        return json({ success: true, message: 'Leaderboard reset successful' });
+        const wasReset = await db.resetLeaderboardIfInactive();
+        if (wasReset) {
+            return json({ success: true, message: 'Leaderboard reset due to 3h inactivity' });
+        } else {
+            return json({ success: true, message: 'Leaderboard remains active (top score recently updated)' });
+        }
     } catch (e) {
         console.error('Leaderboard reset failed:', e);
         return json({ error: 'Internal Server Error' }, { status: 500 });

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Basic Exercise</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 2rem;
+            background: #f0f4f8;
+        }
+        iframe {
+            width: 100%;
+            height: 400px;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <h1>Hello world</h1>
+    <p>Below is the requested video:</p>
+    <iframe 
+        width="560" 
+        height="315" 
+        src="https://www.youtube.com/embed/vY2xUc4TVmY" 
+        title="YouTube video player" 
+        frameborder="0" 
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+        referrerpolicy="strict-origin-when-cross-origin" 
+        allowfullscreen
+    ></iframe>
+
+    <h2>Standard &lt;video&gt; Tag</h2>
+    <p>This tag is used for local or direct video files (.mp4, .webm):</p>
+    <video width="560" height="315" controls poster="https://peach.blender.org/wp-content/uploads/title_anouncement.jpg">
+        <source src="https://archive.org/download/BigBuckBunny_124/BigBuckBunny.mp4" type="video/mp4">
+        Your browser does not support the video tag.
+    </video>
+</body>
+</html>

@@ -88,10 +88,6 @@
 				<a href="/about" onclick={() => isMenuOpen = false}>about</a>
 				<div class="menu-divider"></div>
 				<div class="settings-panel">
-					<label title="Frames Per Second">
-						<span>Target FPS</span>
-						<input type="number" bind:value={settings.fps} min="10" max="240" step="1" />
-					</label>
 					<label class="checkbox-label">
 						<input type="checkbox" bind:checked={settings.showBackground} />
 						<span>Show Background</span>

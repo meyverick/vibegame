@@ -51,6 +51,16 @@
 
 	let isShaking = $state(false);
 
+	let timeScale = $state(1.0);
+	let timeWarpActive = $state(false);
+	let personalBest = $state(0);
+
+	let timeWarpBonus = $state({
+		x: -100,
+		y: -100,
+		active: false
+	});
+
 	let activeRadioMessage: { username: string, text: string } | null = $state(null);
 	let radioCooldown = $state(0);
 	let hasShownRadioMessage = $state(false);
@@ -80,7 +90,13 @@
 
 	// Velocity magnitude for panic emoji
 	let velocityMagnitude = $derived(Math.sqrt(velocity.x ** 2 + velocity.y ** 2));
-	let playerEmoji = $derived(velocityMagnitude > 15 ? '😱' : '🚀');
+	let playerEmoji = $derived.by(() => {
+		if (velocityMagnitude > 15) return '😱';
+		if (personalBest >= 1500) return '👾';
+		if (personalBest >= 750) return '🛰️';
+		if (personalBest >= 250) return '🛸';
+		return '🚀';
+	});
 
 	let particles: Particle[] = $state([]);
 	let zapBonus = $state({
@@ -114,7 +130,7 @@
 
 	const junkEmojis = ['🚽', '🍌', '🛋️', '📦', '🪑'];
 
-	let satellite = $state({
+	let planet = $state({
 		x: 200,
 		y: 300,
 		vx: (Math.random() - 0.5) * 2,
@@ -137,7 +153,7 @@
 	const acceleration = 0.5;
 	const friction = 0.98;
 	const charSize = 40;
-	const satelliteSize = 60;
+	const planetSize = 80;
 	const minPullForce = 0.01;
 	const maxPullForce = 0.2;
 	const pullRadius = 1536;
@@ -252,12 +268,12 @@
 				const dx = charPos.x - taxCollector.x;
 				const dy = charPos.y - taxCollector.y;
 				const angle = Math.atan2(dy, dx);
-				taxCollector.vx += Math.cos(angle) * 0.1;
-				taxCollector.vy += Math.sin(angle) * 0.1;
-				taxCollector.vx *= 0.98;
-				taxCollector.vy *= 0.98;
-				taxCollector.x += taxCollector.vx;
-				taxCollector.y += taxCollector.vy;
+				taxCollector.vx += Math.cos(angle) * 0.1 * timeScale;
+				taxCollector.vy += Math.sin(angle) * 0.1 * timeScale;
+				taxCollector.vx *= (1 - (1 - 0.98) * timeScale);
+				taxCollector.vy *= (1 - (1 - 0.98) * timeScale);
+				taxCollector.x += taxCollector.vx * timeScale;
+				taxCollector.y += taxCollector.vy * timeScale;
 
 				// Despawn if too far away
 				if (typeof window !== 'undefined') {
@@ -265,6 +281,11 @@
 						taxCollector.active = false;
 					}
 				}
+			}
+
+			// Time Warp Spawning (rarely)
+			if (!timeWarpBonus.active && !timeWarpActive && Math.random() < 0.001) {
+				spawnTimeWarpBonus();
 			}
 
 			if (Math.abs(velocity.x) > 0.5 || Math.abs(velocity.y) > 0.5) {
@@ -296,9 +317,9 @@
 								}
 
 			// Warp Movement & Gravity
-			warp.x += warp.vx;
-			warp.y += warp.vy;
-			warp.angle += 1;
+			warp.x += warp.vx * timeScale;
+			warp.y += warp.vy * timeScale;
+			warp.angle += 1 * timeScale;
 
 			if (typeof window !== 'undefined') {
 				const margin = 50;
@@ -315,7 +336,7 @@
 			if (distW < pullRadius) {
 				// Linear interpolation between maxPullForce (center) and minPullForce (edge)
 				const t = 1 - (distW / pullRadius); // 1 at center, 0 at edge
-				const pull = minPullForce + (maxPullForce - minPullForce) * t;
+				const pull = (minPullForce + (maxPullForce - minPullForce) * t) * timeScale;
 				
 				const angleW = Math.atan2(dyW, dxW);
 				velocity.x += Math.cos(angleW) * pull;
@@ -329,14 +350,14 @@
 			charPos.x += velocity.x;
 			charPos.y += velocity.y;
 
-			// Update satellite position
-			satellite.x += satellite.vx;
-			satellite.y += satellite.vy;
+			// Update planet position
+			planet.x += planet.vx * timeScale;
+			planet.y += planet.vy * timeScale;
 
 			// Update meteorites position
 			meteorites.forEach(m => {
-				m.y += m.speed;
-				m.x += m.vx;
+				m.y += m.speed * timeScale;
+				m.x += m.vx * timeScale;
 				// The comet emoji (☄️) is drawn at ~135 degrees (pointing down-right)
 				// We want its head to point in the direction of velocity (atan2(speed, vx))
 				m.angle = (Math.atan2(m.speed, m.vx) * 180 / Math.PI) - 135;
@@ -369,12 +390,12 @@
 					velocity.y *= -0.5;
 				}
 
-				// Satellite boundary checks
-				if (satellite.x < 0 || satellite.x > window.innerWidth - 60) {
-					satellite.vx *= -1;
+				// Planet boundary checks
+				if (planet.x < 0 || planet.x > window.innerWidth - planetSize) {
+					planet.vx *= -1;
 				}
-				if (satellite.y < 0 || satellite.y > window.innerHeight - 60) {
-					satellite.vy *= -1;
+				if (planet.y < 0 || planet.y > window.innerHeight - planetSize) {
+					planet.vy *= -1;
 				}
 			}
 
@@ -447,18 +468,25 @@
 		}
 	}
 
-	function spawnSatellite() {
+	function spawnPlanet() {
 		if (typeof window === 'undefined') return;
-		satellite.x = Math.random() * (window.innerWidth - 100) + 50;
-		satellite.y = Math.random() * (window.innerHeight - 100) + 50;
-		satellite.vx = (Math.random() - 0.5) * 4;
-		satellite.vy = (Math.random() - 0.5) * 4;
-		satellite.exploded = false;
+		planet.x = Math.random() * (window.innerWidth - 100) + 50;
+		planet.y = Math.random() * (window.innerHeight - 100) + 50;
+		planet.vx = (Math.random() - 0.5) * 3;
+		planet.vy = (Math.random() - 0.5) * 3;
+		planet.exploded = false;
 	}
 
 	onMount(() => {
 		fetchLeaderboard();
 		startSession();
+		
+		// Load personal best from localStorage
+		if (typeof localStorage !== 'undefined') {
+			const storedPB = localStorage.getItem('personalBest');
+			if (storedPB) personalBest = parseInt(storedPB, 10);
+		}
+
 		const pollInterval = setInterval(fetchLeaderboard, 10000);
 		// Initialize positions based on screen size
 		if (typeof window !== 'undefined') {
@@ -467,7 +495,7 @@
 			warp.x = window.innerWidth * 0.7;
 			warp.y = window.innerHeight * 0.3;
 			
-			spawnSatellite();
+			spawnPlanet();
 			
 							asteroids = Array.from({ length: 5 }, (_, i) => ({
 							id: i,
@@ -491,7 +519,7 @@
 			frame = requestAnimationFrame(loop);
 			
 			const deltaTime = currentTime - lastTime;
-			const interval = 1000 / settings.fps;
+			const interval = 1000 / 30;
 
 			if (deltaTime < interval) return;
 			lastTime = currentTime - (deltaTime % interval);
@@ -535,6 +563,22 @@
 		zapBonus.x = Math.random() * (window.innerWidth - 100) + 50;
 		zapBonus.y = Math.random() * (window.innerHeight - 100) + 50;
 		zapBonus.active = true;
+	}
+
+	function spawnTimeWarpBonus() {
+		if (typeof window === 'undefined') return;
+		timeWarpBonus.x = Math.random() * (window.innerWidth - 100) + 50;
+		timeWarpBonus.y = Math.random() * (window.innerHeight - 100) + 50;
+		timeWarpBonus.active = true;
+	}
+
+	function activateTimeWarp() {
+		timeScale = 0.25;
+		timeWarpActive = true;
+		safeTimeout(() => {
+			timeScale = 1.0;
+			timeWarpActive = false;
+		}, 5000);
 	}
 
 	function zapMeteorite() {
@@ -630,6 +674,14 @@
 			gameOver = true;
 			currentDeathMessage = deathMessages[Math.floor(Math.random() * deathMessages.length)];
 			
+			// Update personal best
+			if (score > personalBest) {
+				personalBest = score;
+				if (typeof localStorage !== 'undefined') {
+					localStorage.setItem('personalBest', personalBest.toString());
+				}
+			}
+
 			// Fetch absolute latest leaderboard to ensure we don't use stale polling data
 			await fetchLeaderboard();
 
@@ -654,15 +706,15 @@
 			await handleDeath();
 		}
 
-		// Check satellite collision
-		if (!satellite.exploded) {
-			const dx = charCenterX - (satellite.x + satelliteSize / 2);
-			const dy = charCenterY - (satellite.y + satelliteSize / 2);
+		// Check planet collision
+		if (!planet.exploded) {
+			const dx = charCenterX - (planet.x + planetSize / 2);
+			const dy = charCenterY - (planet.y + planetSize / 2);
 			const distance = Math.sqrt(dx * dx + dy * dy);
-			if (distance < (charSize + satelliteSize) / 2.5) {
-				satellite.exploded = true;
-				// Respawn satellite after 5 seconds
-				safeTimeout(spawnSatellite, 5000);
+			if (distance < (charSize + planetSize) / 2.5) {
+				planet.exploded = true;
+				// Respawn planet after 5 seconds
+				safeTimeout(spawnPlanet, 5000);
 				await handleDeath();
 			}
 		}
@@ -701,6 +753,18 @@
 			if (distance < charSize) {
 				shieldBonus.active = false;
 				hasShield = true;
+				triggerShake();
+			}
+		}
+
+		// Check time warp bonus collision
+		if (timeWarpBonus.active) {
+			const dx = charPos.x - timeWarpBonus.x;
+			const dy = charPos.y - timeWarpBonus.y;
+			const distance = Math.sqrt(dx * dx + dy * dy);
+			if (distance < charSize) {
+				timeWarpBonus.active = false;
+				activateTimeWarp();
 				triggerShake();
 			}
 		}
@@ -754,6 +818,9 @@
 		charPos = { x: 100, y: 100 };
 		velocity = { x: 0, y: 0 };
 		score = 0;
+		timeScale = 1.0;
+		timeWarpActive = false;
+		timeWarpBonus.active = false;
 		gameOver = false;
 		showHighScorePrompt = false;
 		newHighScoreMessage = '';
@@ -766,7 +833,7 @@
 		taxedPopup.active = false;
 		spawnZapBonus();
 		spawnShieldBonus();
-		spawnSatellite();
+		spawnPlanet();
 		meteorites = [{
 			id: Math.random(),
 			x: Math.random() * (typeof window !== 'undefined' ? window.innerWidth - 100 : 800) + 50,
@@ -825,7 +892,7 @@
 />
 
 <div class="game-container">
-	<div class="shake-layer" class:shake={isShaking && settings.enableShake}>
+	<div class="shake-layer" class:shake={isShaking && settings.enableShake} class:time-warp={timeWarpActive}>
 		{#each particles as p (p.id)}
 			<div
 				class="particle"
@@ -865,14 +932,20 @@
 			</div>
 		{/if}
 
+		{#if timeWarpBonus.active}
+			<div class="bonus-timewarp" style="left: {timeWarpBonus.x}px; top: {timeWarpBonus.y}px;">
+				⏳
+			</div>
+		{/if}
+
 		{#if shieldBonus.active}
 			<div class="bonus-shield" style="left: {shieldBonus.x}px; top: {shieldBonus.y}px;">
 				🛡️
 			</div>
 		{/if}
 
-		<div class="satellite" class:exploded={satellite.exploded} style="left: {satellite.x}px; top: {satellite.y}px;">
-			{satellite.exploded ? '💥' : '🛰️'}
+		<div class="planet" class:exploded={planet.exploded} style="left: {planet.x}px; top: {planet.y}px;">
+			{planet.exploded ? '🌋' : '🪐'}
 		</div>
 
 		{#each meteorites as m (m.id)}
@@ -934,6 +1007,22 @@
 			{:else}
 				<h1>GAME OVER</h1>
 				<p>{currentDeathMessage}</p>
+				
+				<div class="unlocks-preview">
+					<div class="unlock-item" class:locked={personalBest < 250}>
+						<span class="unlock-emoji">🛸</span>
+						<span class="unlock-pts">250 pts</span>
+					</div>
+					<div class="unlock-item" class:locked={personalBest < 750}>
+						<span class="unlock-emoji">🛰️</span>
+						<span class="unlock-pts">750 pts</span>
+					</div>
+					<div class="unlock-item" class:locked={personalBest < 1500}>
+						<span class="unlock-emoji">👾</span>
+						<span class="unlock-pts">1500 pts</span>
+					</div>
+				</div>
+
 				<button onclick={restart}>Try Again</button>
 			{/if}
 		</div>
@@ -1001,6 +1090,11 @@
 
 	.shake-layer.shake {
 		animation: shake 0.3s infinite;
+	}
+
+	.shake-layer.time-warp {
+		filter: sepia(0.5) hue-rotate(90deg) contrast(1.2);
+		transition: filter 0.5s ease;
 	}
 
 	.particle {
@@ -1185,6 +1279,16 @@
 		filter: drop-shadow(0 0 10px #6366f1);
 	}
 
+	.bonus-timewarp {
+		position: fixed;
+		font-size: 3rem;
+		z-index: 15;
+		user-select: none;
+		pointer-events: none;
+		animation: pulse-bonus 1s ease-in-out infinite;
+		filter: drop-shadow(0 0 15px #10b981);
+	}
+
 	.bonus-shield {
 		position: fixed;
 		font-size: 3rem;
@@ -1291,16 +1395,17 @@
 		100% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.8; }
 	}
 
-	.satellite {
+	.planet {
 		position: fixed;
-		font-size: 5rem;
+		font-size: 6rem;
 		z-index: 150;
 		user-select: none;
 		pointer-events: none;
-		filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.4));
+		filter: drop-shadow(0 0 25px rgba(255, 165, 0, 0.4));
+		transition: transform 0.1s;
 	}
 
-	.satellite.exploded {
+	.planet.exploded {
 		animation: explode 0.5s forwards;
 	}
 
@@ -1400,6 +1505,40 @@
 
 	.game-over button:hover {
 		background: #ddd;
+	}
+
+	.unlocks-preview {
+		display: flex;
+		justify-content: center;
+		gap: 1.5rem;
+		margin: 1.5rem 0;
+		padding: 1rem;
+		background: rgba(255, 255, 255, 0.05);
+		border-radius: 0.5rem;
+	}
+
+	.unlock-item {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.25rem;
+		transition: opacity 0.3s;
+	}
+
+	.unlock-item.locked {
+		opacity: 0.2;
+		filter: grayscale(1);
+	}
+
+	.unlock-emoji {
+		font-size: 2rem;
+	}
+
+	.unlock-pts {
+		font-size: 0.7rem;
+		color: #94a3b8;
+		text-transform: uppercase;
+		letter-spacing: 1px;
 	}
 
 	@keyframes float {

@@ -47,7 +47,7 @@
 			animationFrame = requestAnimationFrame(tick);
 
 			const deltaTime = currentTime - lastTime;
-			const interval = 1000 / settings.fps;
+			const interval = 1000 / 30;
 
 			if (deltaTime < interval) {
 				return;

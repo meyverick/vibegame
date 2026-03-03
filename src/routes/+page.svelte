@@ -8,6 +8,7 @@
 	let animationFrame: number;
 	
 	let globalBest = $state<{username: string, score: number} | null>(null);
+	let leaderboardTTL = $state(0);
 
 	/** @param {PointerEvent} e */
 	function handlePointerMove(e: PointerEvent) {
@@ -19,13 +20,27 @@
 		try {
 			const res = await fetch('/api/leaderboard');
 			const data = await res.json();
-			if (data && data.length > 0) {
-				globalBest = data[0];
+			if (data && typeof data.resetIn === 'number') {
+				leaderboardTTL = data.resetIn;
+			}
+			if (data && data.scores && data.scores.length > 0) {
+				globalBest = data.scores[0];
+			} else {
+				globalBest = null;
 			}
 		} catch (e) {
 			console.error('Failed to fetch leaderboard:', e);
 		}
 	}
+
+	// Format TTL to HH:MM:SS
+	let formattedTTL = $derived.by(() => {
+		if (leaderboardTTL <= 0) return "24:00:00";
+		const h = Math.floor(leaderboardTTL / 3600);
+		const m = Math.floor((leaderboardTTL % 3600) / 60);
+		const s = Math.floor(leaderboardTTL % 60);
+		return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+	});
 
 	function resetGame() {
 		isGameOver = false;
@@ -38,6 +53,10 @@
 	onMount(() => {
 		fetchLeaderboard();
 		resetGame();
+
+		const ttlInterval = setInterval(() => {
+			if (leaderboardTTL > 0) leaderboardTTL -= 1;
+		}, 1000);
 
 		let lastTime = performance.now();
 		const fpsLimit = 60;
@@ -81,6 +100,7 @@
 
 		return () => {
 			if (animationFrame) cancelAnimationFrame(animationFrame);
+			clearInterval(ttlInterval);
 		};
 	});
 
@@ -97,6 +117,7 @@
 		{:else}
 			<span class="best-label">NO RECORDS YET</span>
 		{/if}
+		<div class="reset-info">Reset in: {formattedTTL}</div>
 	</div>
 
 	<div 
@@ -113,10 +134,6 @@
 			<button onclick={resetGame}>Try Again</button>
 		</div>
 	{:else}
-		<h1>
-			home
-		</h1>
-		<p>the gravity well is pulling you in.</p>
 		<a href="/about" class="play-link">ENTER MISSION SECTOR ➔</a>
 	{/if}
 </main>
@@ -140,11 +157,20 @@
 		top: 1rem;
 		right: 1rem;
 		background: rgba(255, 255, 255, 0.05);
-		padding: 0.5rem 1rem;
-		border-radius: 2rem;
+		padding: 0.75rem 1.25rem;
+		border-radius: 1rem;
 		border: 1px solid rgba(255, 255, 255, 0.1);
 		backdrop-filter: blur(5px);
 		z-index: 50;
+		text-align: right;
+	}
+
+	.reset-info {
+		font-size: 0.6rem;
+		color: #94a3b8;
+		text-transform: uppercase;
+		letter-spacing: 1px;
+		margin-top: 0.25rem;
 	}
 
 	.best-label {

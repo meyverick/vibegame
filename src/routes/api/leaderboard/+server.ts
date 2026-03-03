@@ -8,8 +8,11 @@ import { isRateLimited } from '$lib/server/limiter';
  * Get leaderboard
  */
 export const GET: RequestHandler = async () => {
-    const scores = await db.getLeaderboard();
-    return json(scores);
+    const [scores, resetIn] = await Promise.all([
+        db.getLeaderboard(),
+        db.getLeaderboardTTL()
+    ]);
+    return json({ scores, resetIn });
 };
 
 /**

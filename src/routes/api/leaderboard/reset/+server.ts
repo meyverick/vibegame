@@ -20,7 +20,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
     try {
         const wasReset = await db.resetLeaderboardIfInactive();
         if (wasReset) {
-            return json({ success: true, message: 'Leaderboard reset due to 3h inactivity' });
+            return json({ success: true, message: 'Leaderboard reset due to 24h inactivity' });
         } else {
             return json({ success: true, message: 'Leaderboard remains active (top score recently updated)' });
         }

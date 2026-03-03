@@ -10,7 +10,7 @@ export interface HighScore {
 
 const LEADERBOARD_KEY = 'leaderboard';
 const LAST_UPDATE_KEY = 'leaderboard:last_update';
-const RESET_THRESHOLD_SECONDS = 60 * 60 * 3; // 3 hours
+const RESET_THRESHOLD_SECONDS = 60 * 60 * 24; // 24 hours
 
 let redis: Redis | null = null;
 let localLeaderboard: HighScore[] = [];
@@ -108,10 +108,16 @@ export async function addScore(username: string, score: number, message?: string
         await client.zadd(LEADERBOARD_KEY, score, member);
         await client.zremrangebyrank(LEADERBOARD_KEY, 0, -101);
 
-        // If this is a new top score, reset the 3-hour timer
+        // Reset the 24-hour timer if this is a new top score
         if (isNewTopScore) {
-            console.log('New top score! Resetting the 3-hour inactivity timer.');
+            console.log('New top score! Resetting the 24-hour inactivity timer.');
             await client.set(LAST_UPDATE_KEY, 'active', 'EX', RESET_THRESHOLD_SECONDS);
+        } else {
+            // If it's not a top score, but the timer is somehow missing, initialize it
+            const exists = await client.exists(LAST_UPDATE_KEY);
+            if (!exists) {
+                await client.set(LAST_UPDATE_KEY, 'active', 'EX', RESET_THRESHOLD_SECONDS);
+            }
         }
         
         return getLeaderboard();
@@ -142,6 +148,24 @@ export async function resetLeaderboardIfInactive(): Promise<boolean> {
     } catch (e) {
         console.error('Leaderboard inactivity check error:', e);
         throw e;
+    }
+}
+
+/**
+ * Get the time remaining (in seconds) until the leaderboard resets
+ */
+export async function getLeaderboardTTL(): Promise<number> {
+    const client = getRedis();
+    // Local development fallback: show the full threshold if Redis is not configured
+    if (!client) return RESET_THRESHOLD_SECONDS;
+    try {
+        const ttl = await client.ttl(LAST_UPDATE_KEY);
+        // If key doesn't exist (-2), it means no one has played yet.
+        // Return the full 24h threshold as a default.
+        if (ttl === -2) return RESET_THRESHOLD_SECONDS;
+        return ttl > 0 ? ttl : 0;
+    } catch (e) {
+        return RESET_THRESHOLD_SECONDS;
     }
 }
 

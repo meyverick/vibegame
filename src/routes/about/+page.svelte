@@ -32,6 +32,7 @@
 	let rotation = $state(0);
 	let score = $state(0);
 	let globalBest: LeaderboardEntry | null = $state(null);
+	let leaderboardTTL = $state(0);
 	let showHighScorePrompt = $state(false);
 	let showCustomizer = $state(false);
 	let showRichModal = $state(false);
@@ -66,6 +67,26 @@
 		x: -100,
 		y: -100,
 		active: false
+	});
+
+	let tower = $state({
+		active: false,
+		level: 0,
+		x: 0,
+		y: 0,
+		attackTimer: 0
+	});
+
+	let towerBonus = $state({
+		x: -100,
+		y: -100,
+		active: false
+	});
+
+	let towerLaser = $state({
+		active: false,
+		x1: 0, y1: 0, x2: 0, y2: 0,
+		angle: 0, length: 0
 	});
 
 	let activeRadioMessage: { username: string, text: string } | null = $state(null);
@@ -348,38 +369,53 @@
 				}
 			}
 
+			// Tower Attack logic
+			if (tower.active) {
+				tower.attackTimer -= (1 * timeScale);
+				if (tower.attackTimer <= 0) {
+					await towerAttack();
+					// Base cooldown is 3s (90 frames at 30fps), reduces per level
+					const cooldown = Math.max(15, 90 / (1 + tower.level * 0.5)); 
+					tower.attackTimer = cooldown;
+				}
+			}
+
 			// Time Warp Spawning (rarely)
 			if (!timeWarpBonus.active && !timeWarpActive && Math.random() < 0.001) {
 				spawnTimeWarpBonus();
+			}
+
+			// Tower Bonus Spawning (rarely)
+			if (!towerBonus.active && Math.random() < 0.001) {
+				spawnTowerBonus();
 			}
 
 			if (Math.abs(velocity.x) > 0.5 || Math.abs(velocity.y) > 0.5) {
 				addParticles();
 			}
 
-							// Input handling
-							const currentAccel = acceleration;
-							
-							if (isAnyKeyPressed) {
-					
-						isFollowingClick = false;
-						if (keys.ArrowUp) velocity.y -= currentAccel;
-						if (keys.ArrowDown) velocity.y += currentAccel;
-						if (keys.ArrowLeft) velocity.x -= currentAccel;
-						if (keys.ArrowRight) velocity.x += currentAccel;
-					} else if (isFollowingClick) {
-						const dx = targetPos.x - charPos.x;
-						const dy = targetPos.y - charPos.y;
-						const distance = Math.sqrt(dx * dx + dy * dy);
+			// Input handling
+			const currentAccel = acceleration;
 			
-						if (distance > 10) {
-							const angle = Math.atan2(dy, dx);
-							velocity.x += Math.cos(angle) * currentAccel;
-							velocity.y += Math.sin(angle) * currentAccel;
-						} else {
-							isFollowingClick = false;
-						}
-								}
+			if (isAnyKeyPressed) {
+				isFollowingClick = false;
+				if (keys.ArrowUp) velocity.y -= currentAccel;
+				if (keys.ArrowDown) velocity.y += currentAccel;
+				if (keys.ArrowLeft) velocity.x -= currentAccel;
+				if (keys.ArrowRight) velocity.x += currentAccel;
+			} else if (isFollowingClick) {
+				const dx = targetPos.x - charPos.x;
+				const dy = targetPos.y - charPos.y;
+				const distance = Math.sqrt(dx * dx + dy * dy);
+	
+				if (distance > 10) {
+					const angle = Math.atan2(dy, dx);
+					velocity.x += Math.cos(angle) * currentAccel;
+					velocity.y += Math.sin(angle) * currentAccel;
+				} else {
+					isFollowingClick = false;
+				}
+			}
 
 			// Warp Movement & Gravity
 			warp.x += warp.vx * timeScale;
@@ -408,8 +444,7 @@
 				velocity.y += Math.sin(angleW) * pull;
 			}
 					
-																velocity.x *= friction;
-					
+			velocity.x *= friction;
 			velocity.y *= friction;
 
 			charPos.x += velocity.x;
@@ -464,17 +499,17 @@
 				}
 			}
 
-							// Calculate rotation based on velocity with smoothing
-							if (Math.abs(velocity.x) > 0.1 || Math.abs(velocity.y) > 0.1) {
-								const targetRotation = (Math.atan2(velocity.y, velocity.x) * 180) / Math.PI + 45; // Adjusted from +90 to +45 to account for 45deg oblique emoji
-								// Smoothly interpolate towards the target rotation
-								const diff = targetRotation - rotation;
-								// Ensure it takes the shortest path
-								const normalizedDiff = ((diff + 180) % 360) - 180;
-								rotation += normalizedDiff * 0.1;
-							}
+			// Calculate rotation based on velocity with smoothing
+			if (Math.abs(velocity.x) > 0.1 || Math.abs(velocity.y) > 0.1) {
+				const targetRotation = (Math.atan2(velocity.y, velocity.x) * 180) / Math.PI + 45; // Adjusted from +90 to +45 to account for 45deg oblique emoji
+				// Smoothly interpolate towards the target rotation
+				const diff = targetRotation - rotation;
+				// Ensure it takes the shortest path
+				const normalizedDiff = ((diff + 180) % 360) - 180;
+				rotation += normalizedDiff * 0.1;
+			}
 					
-						await checkCollisions();
+			await checkCollisions();
 		}
 	}
 
@@ -482,13 +517,30 @@
 		try {
 			const res = await fetch('/api/leaderboard');
 			const data = await res.json();
-			if (data && data.length > 0) {
-				globalBest = data[0];
+			
+			// Always update TTL if provided
+			if (data && typeof data.resetIn === 'number') {
+				leaderboardTTL = data.resetIn;
+			}
+
+			if (data && data.scores && data.scores.length > 0) {
+				globalBest = data.scores[0];
+			} else {
+				globalBest = null;
 			}
 		} catch (e) {
 			console.error('Failed to fetch leaderboard:', e);
 		}
 	}
+
+	// Format TTL to HH:MM:SS
+	let formattedTTL = $derived.by(() => {
+		if (leaderboardTTL <= 0) return "RESETTING...";
+		const h = Math.floor(leaderboardTTL / 3600);
+		const m = Math.floor((leaderboardTTL % 3600) / 60);
+		const s = Math.floor(leaderboardTTL % 60);
+		return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+	});
 
 	async function startSession() {
 		try {
@@ -546,6 +598,11 @@
 		fetchLeaderboard();
 		startSession();
 		
+		// Local countdown for the TTL
+		const ttlInterval = setInterval(() => {
+			if (leaderboardTTL > 0) leaderboardTTL -= 1;
+		}, 1000);
+
 		// Load persistent data from localStorage
 		if (typeof localStorage !== 'undefined') {
 			const storedPB = localStorage.getItem('personalBest');
@@ -582,6 +639,7 @@
 												meteorites[0].type = '☄️';
 												spawnZapBonus();
 												spawnShieldBonus();
+												spawnTowerBonus();
 											}
 		
 		let lastTime = performance.now();
@@ -607,6 +665,7 @@
 			isRunning = false;
 			cancelAnimationFrame(frame);
 			clearInterval(pollInterval);
+			clearInterval(ttlInterval);
 			clearAllTimeouts();
 		};
 	});
@@ -644,6 +703,53 @@
 		timeWarpBonus.x = Math.random() * (window.innerWidth - 100) + 50;
 		timeWarpBonus.y = Math.random() * (window.innerHeight - 100) + 50;
 		timeWarpBonus.active = true;
+	}
+
+	function spawnTowerBonus() {
+		if (typeof window === 'undefined') return;
+		towerBonus.x = Math.random() * (window.innerWidth - 100) + 50;
+		towerBonus.y = Math.random() * (window.innerHeight - 100) + 50;
+		towerBonus.active = true;
+	}
+
+	async function towerAttack() {
+		if (!tower.active || meteorites.length === 0) return;
+		
+		// Target nearest meteorite
+		let nearest = null;
+		let minDist = Infinity;
+		
+		for (const m of meteorites) {
+			const dx = m.x - tower.x;
+			const dy = m.y - tower.y;
+			const dist = Math.sqrt(dx * dx + dy * dy);
+			if (dist < minDist) {
+				minDist = dist;
+				nearest = m;
+			}
+		}
+
+		if (nearest) {
+			// Fire red laser
+			towerLaser.x1 = tower.x + 30;
+			towerLaser.y1 = tower.y + 30;
+			towerLaser.x2 = nearest.x + 30;
+			towerLaser.y2 = nearest.y + 30;
+			
+			const dx = towerLaser.x2 - towerLaser.x1;
+			const dy = towerLaser.y2 - towerLaser.y1;
+			towerLaser.length = Math.sqrt(dx * dx + dy * dy);
+			towerLaser.angle = Math.atan2(dy, dx) * (180 / Math.PI);
+			towerLaser.active = true;
+
+			safeTimeout(() => {
+				towerLaser.active = false;
+				if (nearest) {
+					nearest.y = typeof window !== 'undefined' ? window.innerHeight + 200 : 1000;
+					score += 5; // Passive points are lower
+				}
+			}, 150);
+		}
 	}
 
 	function activateTimeWarp() {
@@ -843,6 +949,30 @@
 			}
 		}
 
+		// Check tower bonus collision
+		if (towerBonus.active) {
+			const dx = charPos.x - towerBonus.x;
+			const dy = charPos.y - towerBonus.y;
+			const distance = Math.sqrt(dx * dx + dy * dy);
+			if (distance < charSize) {
+				towerBonus.active = false;
+				if (!tower.active) {
+					tower.active = true;
+					if (typeof window !== 'undefined') {
+						tower.x = window.innerWidth / 2 - 40; // Centered
+						tower.y = window.innerHeight - 90; // Slightly lower
+					}
+					tower.level = 1;
+					tower.attackTimer = 30; // Fast initial attack
+				} else {
+					tower.level += 1;
+				}
+				triggerShake();
+				// Respawn bonus elsewhere
+				safeTimeout(spawnTowerBonus, 15000);
+			}
+		}
+
 		// Check asteroids collision
 		asteroids.forEach((ast) => {
 			if (!ast.exploded) {
@@ -905,9 +1035,20 @@
 		shieldBonus.active = false;
 		taxCollector.active = false;
 		taxedPopup.active = false;
+		tower.active = false;
+		tower.level = 0;
+		towerBonus.active = false;
+		towerLaser.active = false;
 		spawnZapBonus();
 		spawnShieldBonus();
+		spawnTowerBonus();
 		spawnPlanet();
+		
+		if (typeof window !== 'undefined') {
+			warp.x = window.innerWidth / 2;
+			warp.y = window.innerHeight / 2;
+		}
+
 		meteorites = [{
 			id: Math.random(),
 			x: Math.random() * (typeof window !== 'undefined' ? window.innerWidth - 100 : 800) + 50,
@@ -1064,6 +1205,26 @@
 				style="left: {activeLaser.x1}px; top: {activeLaser.y1}px; width: {activeLaser.length}px; transform: rotate({activeLaser.angle}deg);"
 			></div>
 		{/if}
+
+		{#if tower.active}
+			<div class="defense-tower" style="left: {tower.x}px; top: {tower.y}px;">
+				🏰
+				<div class="tower-level">LVL {tower.level}</div>
+			</div>
+		{/if}
+
+		{#if towerBonus.active}
+			<div class="bonus-tower" style="left: {towerBonus.x}px; top: {towerBonus.y}px;">
+				🏰
+			</div>
+		{/if}
+
+		{#if towerLaser.active}
+			<div 
+				class="tower-laser" 
+				style="left: {towerLaser.x1}px; top: {towerLaser.y1}px; width: {towerLaser.length}px; transform: rotate({towerLaser.angle}deg);"
+			></div>
+		{/if}
 	</div>
 
 	{#if gameOver}
@@ -1136,6 +1297,7 @@
 		{#if globalBest}
 			<div class="global-best">Best: {globalBest.score} ({globalBest.username})</div>
 		{/if}
+		<div class="reset-timer">Reset in: {formattedTTL}</div>
 		{#if lastScores.length > 0}
 			<div class="last-tries">
 				<div class="last-title">Last tries:</div>
@@ -1701,6 +1863,14 @@
 		letter-spacing: 1px;
 	}
 
+	.reset-timer {
+		font-size: 0.7rem;
+		color: #94a3b8;
+		text-transform: uppercase;
+		letter-spacing: 1px;
+		margin-bottom: 0.5rem;
+	}
+
 	.new-record {
 		color: #ffd700 !important;
 		animation: pulse-gold 2s infinite;
@@ -2017,6 +2187,49 @@
 		transform-origin: 0 50%;
 		pointer-events: none;
 		border-radius: 2px;
+	}
+
+	.defense-tower {
+		position: fixed;
+		font-size: 5rem;
+		z-index: 15;
+		user-select: none;
+		pointer-events: none;
+		filter: drop-shadow(0 0 15px rgba(239, 68, 68, 0.4));
+	}
+
+	.tower-level {
+		position: absolute;
+		top: -10px;
+		left: 50%;
+		transform: translateX(-50%);
+		font-size: 0.8rem;
+		background: #ef4444;
+		color: white;
+		padding: 2px 6px;
+		border-radius: 10px;
+		font-weight: bold;
+		white-space: nowrap;
+	}
+
+	.tower-laser {
+		position: fixed;
+		height: 2px;
+		background: #ef4444;
+		box-shadow: 0 0 10px #ef4444;
+		z-index: 90;
+		transform-origin: 0 50%;
+		pointer-events: none;
+	}
+
+	.bonus-tower {
+		position: fixed;
+		font-size: 3rem;
+		z-index: 15;
+		user-select: none;
+		pointer-events: none;
+		animation: pulse-bonus 1s ease-in-out infinite;
+		filter: drop-shadow(0 0 10px #ef4444);
 	}
 
 	.game-over {

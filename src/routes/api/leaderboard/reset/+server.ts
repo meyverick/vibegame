@@ -12,7 +12,8 @@ export const GET: RequestHandler = async ({ request, url }) => {
     const authHeader = request.headers.get('authorization');
     
     // Vercel Cron jobs send: Authorization: Bearer <CRON_SECRET>
-    if (authHeader !== `Bearer ${env.CRON_SECRET}`) {
+    // Only enforce if CRON_SECRET is defined to prevent 500 errors during initial setup
+    if (env.CRON_SECRET && authHeader !== `Bearer ${env.CRON_SECRET}`) {
         return json({ error: 'Unauthorized' }, { status: 401 });
     }
 

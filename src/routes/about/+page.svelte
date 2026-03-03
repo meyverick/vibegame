@@ -1287,9 +1287,11 @@
 				style="left: {towerLaser.x1}px; top: {towerLaser.y1}px; width: {towerLaser.length}px; transform: rotate({towerLaser.angle}deg);"
 			></div>
 		{/if}
-	</div>
+		</div>
+		</div>
 
-	{#if gameOver}
+		{#if gameOver}
+
 		<div class="game-over">
 			{#if showHighScorePrompt}
 				<h1 class="new-record">NEW GALAXY RECORD!</h1>
@@ -1480,7 +1482,6 @@
 			<div class="radio-body">"{activeRadioMessage.text}"</div>
 		</div>
 	{/if}
-</div>
 
 <style>
 	:global(body) {
@@ -1585,7 +1586,7 @@
 		border-radius: 1.5rem;
 		padding: 0;
 		overflow: hidden;
-		z-index: 5000;
+		z-index: 6000;
 	}
 
 	.customizer-header {

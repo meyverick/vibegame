@@ -57,13 +57,26 @@
 
 	let activeLaser = $state({
 		active: false,
-		x1: 0,
-		y1: 0,
-		x2: 0,
-		y2: 0,
+		x1: 0, y1: 0, x2: 0, y2: 0,
 		angle: 0,
 		length: 0
 	});
+
+	let pendingTimeouts: ReturnType<typeof setTimeout>[] = [];
+
+	function safeTimeout(fn: () => void, delay: number) {
+		const timeout = setTimeout(() => {
+			fn();
+			pendingTimeouts = pendingTimeouts.filter(t => t !== timeout);
+		}, delay);
+		pendingTimeouts.push(timeout);
+		return timeout;
+	}
+
+	function clearAllTimeouts() {
+		pendingTimeouts.forEach(clearTimeout);
+		pendingTimeouts = [];
+	}
 
 	// Velocity magnitude for panic emoji
 	let velocityMagnitude = $derived(Math.sqrt(velocity.x ** 2 + velocity.y ** 2));
@@ -145,6 +158,8 @@
 		ArrowRight: false
 	});
 
+	let isAnyKeyPressed = $derived(Object.values(keys).some(k => k));
+
 	let asteroids = $state(
 		Array.from({ length: 5 }, (_, i) => ({
 			id: i,
@@ -172,7 +187,7 @@
 
 	function triggerShake() {
 		isShaking = true;
-		setTimeout(() => (isShaking = false), 500);
+		safeTimeout(() => (isShaking = false), 500);
 	}
 
 	function addParticles() {
@@ -201,7 +216,7 @@
 				// Show message from top player only once per game
 				hasShownRadioMessage = true;
 				activeRadioMessage = { username: globalBest.username, text: globalBest.message };
-				setTimeout(() => {
+				safeTimeout(() => {
 					activeRadioMessage = null;
 				}, 5000); // Show for 5 seconds
 			}
@@ -257,7 +272,6 @@
 			}
 
 							// Input handling
-							const isAnyKeyPressed = Object.values(keys).some(k => k);
 							const currentAccel = acceleration;
 							
 							if (isAnyKeyPressed) {
@@ -470,9 +484,12 @@
 		
 		let lastTime = performance.now();
 		let frame: number;
+		let isRunning = true;
 
 		async function loop(currentTime: number) {
+			if (!isRunning) return;
 			frame = requestAnimationFrame(loop);
+			
 			const deltaTime = currentTime - lastTime;
 			const interval = 1000 / settings.fps;
 
@@ -485,8 +502,10 @@
 		frame = requestAnimationFrame(loop);
 
 		return () => {
+			isRunning = false;
 			cancelAnimationFrame(frame);
 			clearInterval(pollInterval);
+			clearAllTimeouts();
 		};
 	});
 
@@ -537,7 +556,7 @@
 		activeLaser.active = true;
 
 		// Show laser for 200ms
-		setTimeout(() => {
+		safeTimeout(() => {
 			activeLaser.active = false;
 			// "Destroy" it by forcing a reset
 			target.y = typeof window !== 'undefined' ? window.innerHeight + 200 : 1000;
@@ -583,7 +602,7 @@
 				
 				if (hasShield) {
 					hasShield = false;
-					setTimeout(spawnShieldBonus, 3000);
+					safeTimeout(spawnShieldBonus, 3000);
 					taxedPopup.active = true;
 					taxedPopup.text = 'BLOCKED!';
 					taxedPopup.x = charPos.x;
@@ -605,7 +624,7 @@
 				hasShield = false;
 				triggerShake();
 				// Respawn shield after it's been used (with a delay)
-				setTimeout(spawnShieldBonus, 3000);
+				safeTimeout(spawnShieldBonus, 3000);
 				return true;
 			}
 			gameOver = true;
@@ -643,7 +662,7 @@
 			if (distance < (charSize + satelliteSize) / 2.5) {
 				satellite.exploded = true;
 				// Respawn satellite after 5 seconds
-				setTimeout(spawnSatellite, 5000);
+				safeTimeout(spawnSatellite, 5000);
 				await handleDeath();
 			}
 		}
@@ -670,7 +689,7 @@
 				zapBonus.active = false;
 				zapMeteorite();
 				// Respawn bonus elsewhere
-				setTimeout(spawnZapBonus, 2000);
+				safeTimeout(spawnZapBonus, 2000);
 			}
 		}
 
@@ -716,7 +735,7 @@
 					// Check if we should spawn an extra asteroid (every 50 points)
 					const targetAsteroidCount = 5 + Math.floor(score / 50);
 					
-					setTimeout(() => {
+					safeTimeout(() => {
 						asteroids = asteroids.filter((a) => a.id !== ast.id);
 						// Always spawn at least one to replace the collected one
 						spawnAsteroid();

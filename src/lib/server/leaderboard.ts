@@ -45,7 +45,7 @@ export async function getLeaderboard(): Promise<HighScore[]> {
         console.warn('Leaderboard: Redis not configured, using local in-memory fallback.');
         return localLeaderboard.slice(0, 10);
     }
-...
+
     try {
         const data = await client.zrevrange(LEADERBOARD_KEY, 0, 9, 'WITHSCORES');
         

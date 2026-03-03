@@ -21,7 +21,7 @@ function getRedis() {
  */
 export async function isRateLimited(key: string, cooldownSeconds: number = 30): Promise<boolean> {
     const client = getRedis();
-...
+
     if (!client) {
         const now = Date.now();
         const lastRequest = localLimits.get(key) || 0;

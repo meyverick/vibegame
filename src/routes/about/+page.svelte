@@ -1570,7 +1570,8 @@
 		background: rgba(255, 255, 255, 0.2);
 	}
 
-	.customizer {
+	.modal.customizer {
+		z-index: 6000;
 		min-width: 280px;
 		width: 90%;
 		max-width: 500px;
@@ -1586,7 +1587,6 @@
 		border-radius: 1.5rem;
 		padding: 0;
 		overflow: hidden;
-		z-index: 6000;
 	}
 
 	.customizer-header {
@@ -1923,6 +1923,7 @@
 	}
 
 	.rich-confirmation {
+		z-index: 7000;
 		min-width: 300px;
 		max-width: 420px;
 		background: linear-gradient(145deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.98));

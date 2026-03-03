@@ -682,8 +682,8 @@
 		let frame: number;
 
 		async function loop(currentTime: number) {
-			if (!isLoopRunning) return;
 			frame = requestAnimationFrame(loop);
+			if (!isLoopRunning) return;
 
 			const deltaTime = currentTime - lastTime;
 			const interval = 1000 / 30;
@@ -693,7 +693,6 @@
 
 			await update();
 		}
-
 		frame = requestAnimationFrame(loop);
 
 		return () => {

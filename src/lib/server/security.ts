@@ -76,10 +76,10 @@ export function validateSessionToken(token: string): number | null {
 
 /**
  * Validate if a score is physically possible
- * Max points per second threshold (e.g., 50 points/sec based on current game tuning)
+ * Max points per second threshold (increased from 50 to 150 to accommodate high-bonus scenarios)
  */
-const MAX_POINTS_PER_SECOND = 50;
-const HARD_SCORE_CAP = 50000; // Impossible to reach this normally
+const MAX_POINTS_PER_SECOND = 150;
+const HARD_SCORE_CAP = 100000; // Increased cap
 
 export function isScoreLegit(score: number, startTime: number): boolean {
 	if (score > HARD_SCORE_CAP) return false;

@@ -1586,6 +1586,7 @@
 		border-radius: 1.5rem;
 		padding: 0;
 		overflow: hidden;
+		z-index: 5000;
 	}
 
 	.customizer-header {
@@ -2440,7 +2441,7 @@
 		border: 2px solid white;
 		border-radius: 1rem;
 		text-align: center;
-		z-index: 200;
+		z-index: 5000;
 		backdrop-filter: blur(10px);
 	}
 

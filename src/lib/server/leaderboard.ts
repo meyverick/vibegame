@@ -1,4 +1,5 @@
 import { kv } from '@vercel/kv';
+import { env } from '$env/dynamic/private';
 
 export interface HighScore {
     username: string;
@@ -9,7 +10,7 @@ export interface HighScore {
 const LEADERBOARD_KEY = 'leaderboard';
 
 // In-memory fallback for local development if KV is not configured
-const isKvConfigured = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN;
+const getIsKvConfigured = () => env.KV_REST_API_URL && env.KV_REST_API_TOKEN;
 let localLeaderboard: HighScore[] = [];
 
 /**
@@ -17,7 +18,7 @@ let localLeaderboard: HighScore[] = [];
  * Uses Redis sorted sets (ZREVRANGE) to get high scores.
  */
 export async function getLeaderboard(): Promise<HighScore[]> {
-    if (!isKvConfigured) {
+    if (!getIsKvConfigured()) {
         return localLeaderboard.slice(0, 10);
     }
 
@@ -50,7 +51,7 @@ export async function getLeaderboard(): Promise<HighScore[]> {
  * Add a new score to the leaderboard (Serverless Cloud)
  */
 export async function addScore(username: string, score: number): Promise<HighScore[]> {
-    if (!isKvConfigured) {
+    if (!getIsKvConfigured()) {
         const newEntry: HighScore = {
             username,
             score,

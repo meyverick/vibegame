@@ -1,6 +1,7 @@
 import { kv } from '@vercel/kv';
+import { env } from '$env/dynamic/private';
 
-const isKvConfigured = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN;
+const getIsKvConfigured = () => env.KV_REST_API_URL && env.KV_REST_API_TOKEN;
 const localLimits = new Map<string, number>();
 
 /**
@@ -9,7 +10,7 @@ const localLimits = new Map<string, number>();
  * Falls back to in-memory Map for local development.
  */
 export async function isRateLimited(key: string, cooldownSeconds: number = 30): Promise<boolean> {
-    if (!isKvConfigured) {
+    if (!getIsKvConfigured()) {
         const now = Date.now();
         const lastRequest = localLimits.get(key) || 0;
         if (now - lastRequest < cooldownSeconds * 1000) {

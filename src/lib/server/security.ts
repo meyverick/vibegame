@@ -1,9 +1,10 @@
 import { createHmac, randomBytes } from 'node:crypto';
+import { env } from '$env/dynamic/private';
 
 // Use a stable secret for local development if not provided, 
 // to prevent token invalidation on every server restart during dev.
 const DEVELOPMENT_SECRET = 'dev-secret-stable-123';
-const SECRET = process.env.SESSION_SECRET || process.env.KV_REST_API_TOKEN || DEVELOPMENT_SECRET;
+const SECRET = env.SESSION_SECRET || env.KV_REST_API_TOKEN || DEVELOPMENT_SECRET;
 
 export interface SessionData {
     startTime: number;

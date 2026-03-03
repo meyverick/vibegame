@@ -17,15 +17,18 @@
    - Remove all `fs` and `path` dependencies from the server logic to comply with serverless read-only filesystems.
 
 ### Engineering Constraints
+
 - Do not break the existing Svelte 5 game logic.
 - Maintain the 'Zero-Pronoun Policy' in all code comments.
 - Ensure the project builds successfully after the transition.
 
 ### Execution Phases
+
 - **Phase 1 (Dependencies):** Install @vercel/kv and verify environment compatibility.
 - **Phase 2 (Leaderboard Refactor):** Implement Redis-backed sorted sets for high scores.
 - **Phase 3 (Limiter Refactor):** Implement distributed rate limiting via Redis TTL.
 - **Phase 4 (Validation):** Build the project and verify all local file dependencies are removed from server-side logic.
 
 ### Termination Criteria
+
 Output the completion promise `<promise>SERVERLESS_READY</promise>` only after verifying that the project no longer attempts to write to the local filesystem and that the KV-based API logic is sound."

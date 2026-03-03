@@ -12,7 +12,7 @@ the main agent's context or toolset.
 >
 > ```json
 > {
->   "experimental": { "enableAgents": true }
+> 	"experimental": { "enableAgents": true }
 > }
 > ```
 >
@@ -53,13 +53,13 @@ Gemini CLI comes with the following built-in sub-agents:
   `settings.json`. Example (forcing a specific model):
   ```json
   {
-    "experimental": {
-      "codebaseInvestigatorSettings": {
-        "enabled": true,
-        "maxNumTurns": 20,
-        "model": "gemini-2.5-pro"
-      }
-    }
+  	"experimental": {
+  		"codebaseInvestigatorSettings": {
+  			"enabled": true,
+  			"maxNumTurns": 20,
+  			"model": "gemini-2.5-pro"
+  		}
+  	}
   }
   ```
 
@@ -88,9 +88,9 @@ specific personas. To use custom sub-agents, you must enable them in your
 
 ```json
 {
-  "experimental": {
-    "enableAgents": true
-  }
+	"experimental": {
+		"enableAgents": true
+	}
 }
 ```
 

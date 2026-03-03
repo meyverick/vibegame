@@ -1,63 +1,61 @@
 {
-  "experimental": {
-    "enableAgents": true
-  },
-  "model": {
-    "safetySettings": [
-      {
-        "category": "HARM_CATEGORY_HARASSMENT",
-        "threshold": "BLOCK_NONE"
-      },
-      {
-        "category": "HARM_CATEGORY_HATE_SPEECH",
-        "threshold": "BLOCK_NONE"
-      },
-      {
-        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-        "threshold": "BLOCK_NONE"
-      },
-      {
-        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-        "threshold": "BLOCK_NONE"
-      }
-    ]
-  },
-  "general.previewFeatures": true,
-  "hooksConfig": {
-    "enabled": true
-  },
-  "context": {
-    "includeDirectories": [
-      "~/.gemini/extensions/ralph"
-    ]
-  },
-  "modelConfigs": {
-    "overrides": [
-      {
-        "match": {
-          "overrideScope": "pce"
-        },
-        "modelConfig": {
-          "generateContentConfig": {
-            "thinkingConfig": {
-              "thinkingLevel": "HIGH"
-            }
-          }
-        }
-      },
-      {
-        "match": {
-          "overrideScope": "sveltekit-pro"
-        },
-        "modelConfig": {
-          "generateContentConfig": {
-            "thinkingConfig": {
-              "thinkingLevel": "HIGH"
-            }
-          },
-          "responseMimeType": "text/plain"
-        }
-      }
-    ]
-  }
+	"experimental": {
+		"enableAgents": true
+	},
+	"model": {
+		"safetySettings": [
+			{
+				"category": "HARM_CATEGORY_HARASSMENT",
+				"threshold": "BLOCK_NONE"
+			},
+			{
+				"category": "HARM_CATEGORY_HATE_SPEECH",
+				"threshold": "BLOCK_NONE"
+			},
+			{
+				"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+				"threshold": "BLOCK_NONE"
+			},
+			{
+				"category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+				"threshold": "BLOCK_NONE"
+			}
+		]
+	},
+	"general.previewFeatures": true,
+	"hooksConfig": {
+		"enabled": true
+	},
+	"context": {
+		"includeDirectories": ["~/.gemini/extensions/ralph"]
+	},
+	"modelConfigs": {
+		"overrides": [
+			{
+				"match": {
+					"overrideScope": "pce"
+				},
+				"modelConfig": {
+					"generateContentConfig": {
+						"thinkingConfig": {
+							"thinkingLevel": "HIGH"
+						}
+					}
+				}
+			},
+			{
+				"match": {
+					"overrideScope": "sveltekit-pro"
+				},
+				"modelConfig": {
+					"generateContentConfig": {
+						"thinkingConfig": {
+							"thinkingLevel": "HIGH"
+						}
+					},
+					"responseMimeType": "text/plain"
+				}
+			}
+		]
+	}
 }

@@ -2,10 +2,10 @@ import Redis from 'ioredis';
 import { env } from '$env/dynamic/private';
 
 export interface HighScore {
-    username: string;
-    score: number;
-    timestamp: number;
-    message?: string;
+	username: string;
+	score: number;
+	timestamp: number;
+	message?: string;
 }
 
 const LEADERBOARD_KEY = 'leaderboard';
@@ -16,163 +16,169 @@ let redis: Redis | null = null;
 let localLeaderboard: HighScore[] = [];
 
 function getRedis() {
-    if (redis) return redis;
+	if (redis) return redis;
 
-    // Use SvelteKit env first, then process.env as fallback
-    const url = env.KV_REDIS_URL || env.KV_URL || process.env.KV_REDIS_URL || process.env.KV_URL;
-    const restUrl = env.KV_REST_API_URL || process.env.KV_REST_API_URL;
-    const restToken = env.KV_REST_API_TOKEN || process.env.KV_REST_API_TOKEN;
+	// Use SvelteKit env first, then process.env as fallback
+	const url = env.KV_REDIS_URL || env.KV_URL || process.env.KV_REDIS_URL || process.env.KV_URL;
+	const restUrl = env.KV_REST_API_URL || process.env.KV_REST_API_URL;
+	const restToken = env.KV_REST_API_TOKEN || process.env.KV_REST_API_TOKEN;
 
-    if (url) {
-        redis = new Redis(url);
-        return redis;
-    }
+	if (url) {
+		redis = new Redis(url);
+		return redis;
+	}
 
-    if (restUrl && restToken) {
-        // Note: ioredis doesn't support Vercel KV REST directly, 
-        // but this block is for future-proofing or if using a Redis Proxy.
-        // For now, we prefer the redis:// protocol.
-    }
+	if (restUrl && restToken) {
+		// Note: ioredis doesn't support Vercel KV REST directly,
+		// but this block is for future-proofing or if using a Redis Proxy.
+		// For now, we prefer the redis:// protocol.
+	}
 
-    return null;
+	return null;
 }
 
 /**
- * Get current leaderboard (top 10 scores)
+ * Get current leaderboard (top 10 scores) and its TTL in a single operation
  */
-export async function getLeaderboard(): Promise<HighScore[]> {
-    const client = getRedis();
-    if (!client) {
-        console.warn('Leaderboard: Redis not configured, using local in-memory fallback.');
-        return localLeaderboard.slice(0, 10);
-    }
+export async function getLeaderboardWithTTL(): Promise<{ scores: HighScore[]; resetIn: number }> {
+	const client = getRedis();
+	if (!client) {
+		return { scores: localLeaderboard.slice(0, 10), resetIn: RESET_THRESHOLD_SECONDS };
+	}
 
-    try {
-        const data = await client.zrevrange(LEADERBOARD_KEY, 0, 9, 'WITHSCORES');
-        
-        const leaderboard: HighScore[] = [];
-        for (let i = 0; i < data.length; i += 2) {
-            const member = data[i];
-            const score = parseInt(data[i + 1], 10);
-            
-            // Format: username:timestamp:base64Message
-            const [username, timestampStr, messageBase64] = member.split(':');
-            const message = messageBase64 ? Buffer.from(messageBase64, 'base64').toString('utf-8') : undefined;
-            
-            leaderboard.push({
-                username,
-                score,
-                timestamp: parseInt(timestampStr, 10),
-                message
-            });
-        }
-        
-        return leaderboard;
-    } catch (e) {
-        console.error('Leaderboard fetch error:', e);
-        return [];
-    }
+	try {
+		const pipeline = client.pipeline();
+		pipeline.zrevrange(LEADERBOARD_KEY, 0, 9, 'WITHSCORES');
+		pipeline.ttl(LAST_UPDATE_KEY);
+
+		const results = await pipeline.exec();
+		if (!results) throw new Error('Pipeline failed');
+
+		const [err1, data] = results[0] as [Error | null, string[]];
+		const [err2, ttlRaw] = results[1] as [Error | null, number];
+
+		if (err1) throw err1;
+
+		const leaderboard: HighScore[] = [];
+		for (let i = 0; i < data.length; i += 2) {
+			const member = data[i];
+			const score = parseInt(data[i + 1], 10);
+			const [username, timestampStr, messageBase64] = member.split('|');
+			const message = messageBase64
+				? Buffer.from(messageBase64, 'base64').toString('utf-8')
+				: undefined;
+
+			leaderboard.push({
+				username: username || 'Unknown',
+				score,
+				timestamp: parseInt(timestampStr, 10) || Date.now(),
+				message
+			});
+		}
+
+		const ttl = typeof ttlRaw === 'number' && ttlRaw > 0 ? ttlRaw : RESET_THRESHOLD_SECONDS;
+		return { scores: leaderboard, resetIn: ttl };
+	} catch (e) {
+		console.error('Leaderboard fetch error:', e);
+		return { scores: [], resetIn: RESET_THRESHOLD_SECONDS };
+	}
 }
 
 /**
- * Add a new score to the leaderboard
+ * Add a new score to the leaderboard and return the updated top 10 in a single pipeline
  */
-export async function addScore(username: string, score: number, message?: string): Promise<HighScore[]> {
-    const client = getRedis();
-    
-    // Sanitize message: limit length and remove newlines
-    const sanitizedMessage = message ? message.trim().substring(0, 100).replace(/[\r\n]/g, ' ') : undefined;
-    const messageBase64 = sanitizedMessage ? Buffer.from(sanitizedMessage).toString('base64') : '';
+export async function addScore(
+	username: string,
+	score: number,
+	message?: string
+): Promise<HighScore[]> {
+	const client = getRedis();
+	const sanitizedUsername = username.replace(/\|/g, '');
+	const sanitizedMessage = message
+		? message
+				.trim()
+				.substring(0, 100)
+				.replace(/[\r\n]/g, ' ')
+		: undefined;
+	const messageBase64 = sanitizedMessage ? Buffer.from(sanitizedMessage).toString('base64') : '';
 
-    if (!client) {
-        const newEntry: HighScore = {
-            username,
-            score,
-            timestamp: Date.now(),
-            message: sanitizedMessage
-        };
-        localLeaderboard = [...localLeaderboard, newEntry]
-            .sort((a, b) => b.score - a.score)
-            .slice(0, 100);
-        return getLeaderboard();
-    }
+	if (!client) {
+		const newEntry: HighScore = {
+			username: sanitizedUsername,
+			score,
+			timestamp: Date.now(),
+			message: sanitizedMessage
+		};
+		localLeaderboard = [...localLeaderboard, newEntry]
+			.sort((a, b) => b.score - a.score)
+			.slice(0, 100);
+		return localLeaderboard.slice(0, 10);
+	}
 
-    try {
-        const leaderboard = await getLeaderboard();
-        const isNewTopScore = leaderboard.length === 0 || score > leaderboard[0].score;
+	try {
+		const timestamp = Date.now();
+		const member = `${sanitizedUsername}|${timestamp}|${messageBase64}`;
 
-        const timestamp = Date.now();
-        // Format: username:timestamp:base64Message
-        const member = `${username}:${timestamp}:${messageBase64}`;
-        
-        await client.zadd(LEADERBOARD_KEY, score, member);
-        await client.zremrangebyrank(LEADERBOARD_KEY, 0, -101);
+		const pipeline = client.pipeline();
+		pipeline.zadd(LEADERBOARD_KEY, score, member);
+		pipeline.zremrangebyrank(LEADERBOARD_KEY, 0, -101);
+		pipeline.set(LAST_UPDATE_KEY, 'active', 'EX', RESET_THRESHOLD_SECONDS);
+		pipeline.zrevrange(LEADERBOARD_KEY, 0, 9, 'WITHSCORES');
 
-        // Reset the 24-hour timer if this is a new top score
-        if (isNewTopScore) {
-            console.log('New top score! Resetting the 24-hour inactivity timer.');
-            await client.set(LAST_UPDATE_KEY, 'active', 'EX', RESET_THRESHOLD_SECONDS);
-        } else {
-            // If it's not a top score, but the timer is somehow missing, initialize it
-            const exists = await client.exists(LAST_UPDATE_KEY);
-            if (!exists) {
-                await client.set(LAST_UPDATE_KEY, 'active', 'EX', RESET_THRESHOLD_SECONDS);
-            }
-        }
-        
-        return getLeaderboard();
-    } catch (e) {
-        console.error('Leaderboard add error:', e);
-        throw e;
-    }
+		const results = await pipeline.exec();
+		if (!results) throw new Error('Pipeline failed');
+
+		const [err, data] = results[3] as [Error | null, string[]];
+		if (err) throw err;
+
+		const leaderboard: HighScore[] = [];
+		for (let i = 0; i < data.length; i += 2) {
+			const memberItem = data[i];
+			const scoreItem = parseInt(data[i + 1], 10);
+			const [u, t, m] = memberItem.split('|');
+			const msg = m ? Buffer.from(m, 'base64').toString('utf-8') : undefined;
+			leaderboard.push({
+				username: u,
+				score: scoreItem,
+				timestamp: parseInt(t, 10),
+				message: msg
+			});
+		}
+		return leaderboard;
+	} catch (e) {
+		console.error('Leaderboard add error:', e);
+		throw e;
+	}
 }
 
 /**
  * Reset the entire leaderboard if it has been inactive for > 3 hours
  */
 export async function resetLeaderboardIfInactive(): Promise<boolean> {
-    const client = getRedis();
-    if (!client) return false;
+	const client = getRedis();
+	if (!client) return false;
 
-    try {
-        // Check if the timer key exists
-        const isActive = await client.exists(LAST_UPDATE_KEY);
-        
-        if (!isActive) {
-            console.log('Inactivity threshold reached (24h). Resetting leaderboard.');
-            await client.del(LEADERBOARD_KEY);
-            return true;
-        }
-        
-        return false;
-    } catch (e) {
-        console.error('Leaderboard inactivity check error:', e);
-        throw e;
-    }
-}
+	try {
+		// Check if the timer key exists
+		const isActive = await client.exists(LAST_UPDATE_KEY);
 
-/**
- * Get the time remaining (in seconds) until the leaderboard resets
- */
-export async function getLeaderboardTTL(): Promise<number> {
-    const client = getRedis();
-    // Local development fallback: show the full threshold if Redis is not configured
-    if (!client) return RESET_THRESHOLD_SECONDS;
-    try {
-        const ttl = await client.ttl(LAST_UPDATE_KEY);
-        // If key doesn't exist (-2), it means no one has played yet.
-        // Return the full 24h threshold as a default.
-        if (ttl === -2) return RESET_THRESHOLD_SECONDS;
-        return ttl > 0 ? ttl : 0;
-    } catch (e) {
-        return RESET_THRESHOLD_SECONDS;
-    }
+		if (!isActive) {
+			console.log('Inactivity threshold reached (24h). Resetting leaderboard.');
+			await client.del(LEADERBOARD_KEY);
+			return true;
+		}
+
+		return false;
+	} catch (e) {
+		console.error('Leaderboard inactivity check error:', e);
+		throw e;
+	}
 }
 
 /**
  * Get the current best score
  */
 export async function getBestScore(): Promise<HighScore | null> {
-    const leaderboard = await getLeaderboard();
-    return leaderboard.length > 0 ? leaderboard[0] : null;
+	const { scores } = await getLeaderboardWithTTL();
+	return scores.length > 0 ? scores[0] : null;
 }

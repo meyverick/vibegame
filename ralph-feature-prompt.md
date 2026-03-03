@@ -19,15 +19,18 @@
    - Add an 'Unlocked Ships' preview section to the Game Over screen.
 
 ### Engineering Constraints
+
 - Use Svelte 5 runes (`$state`, `$derived`, `$effect`) exclusively.
 - Ensure all new asynchronous logic utilizes the `safeTimeout` helper to prevent memory leaks.
 - Maintain the 'Zero-Pronoun Policy' in all code comments.
 
 ### Execution Phases
+
 - **Phase 1 (Physics Refactor):** Introduce the `timeScale` variable and apply the multiplier to all movement and gravity calculations.
 - **Phase 2 (Time Power-up):** Implement the ⏳ bonus spawning, collection logic, and the visual CSS filter.
 - **Phase 3 (Persistence & Unlocks):** Implement `localStorage` handling for the personal best and update the player avatar logic.
 - **Phase 4 (Validation):** Build the project and verify that time dilation correctly slows the world without affecting the player's own responsiveness.
 
 ### Termination Criteria
+
 Output the completion promise `<promise>FEATURES_EXPANDED</promise>` only after verifying that the ship unlocks persist after a page refresh and the time dilation effect resets correctly after 5 seconds."

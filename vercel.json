@@ -1,8 +1,8 @@
 {
-  "crons": [
-    {
-      "path": "/api/leaderboard/reset",
-      "schedule": "0 0 * * *"
-    }
-  ]
+	"crons": [
+		{
+			"path": "/api/leaderboard/reset",
+			"schedule": "0 0 * * *"
+		}
+	]
 }

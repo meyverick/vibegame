@@ -31,6 +31,7 @@
 	let velocity = $state({ x: 0, y: 0 });
 	let rotation = $state(0);
 	let score = $state(0);
+	let isLoopRunning = $state(true);
 	let globalBest: LeaderboardEntry | null = $state(null);
 	let leaderboardTTL = $state(0);
 	let showHighScorePrompt = $state(false);
@@ -85,17 +86,24 @@
 
 	let towerLaser = $state({
 		active: false,
-		x1: 0, y1: 0, x2: 0, y2: 0,
-		angle: 0, length: 0
+		x1: 0,
+		y1: 0,
+		x2: 0,
+		y2: 0,
+		angle: 0,
+		length: 0
 	});
 
-	let activeRadioMessage: { username: string, text: string } | null = $state(null);
+	let activeRadioMessage: { username: string; text: string } | null = $state(null);
 	let radioCooldown = $state(0);
 	let hasShownRadioMessage = $state(false);
 
 	let activeLaser = $state({
 		active: false,
-		x1: 0, y1: 0, x2: 0, y2: 0,
+		x1: 0,
+		y1: 0,
+		x2: 0,
+		y2: 0,
 		angle: 0,
 		length: 0
 	});
@@ -105,7 +113,7 @@
 	function safeTimeout(fn: () => void, delay: number) {
 		const timeout = setTimeout(() => {
 			fn();
-			pendingTimeouts = pendingTimeouts.filter(t => t !== timeout);
+			pendingTimeouts = pendingTimeouts.filter((t) => t !== timeout);
 		}, delay);
 		pendingTimeouts.push(timeout);
 		return timeout;
@@ -118,10 +126,18 @@
 
 	// Velocity magnitude for logic
 	let velocityMagnitude = $derived(Math.sqrt(velocity.x ** 2 + velocity.y ** 2));
-	
+
+	// Sync loop state with global pause for layout animations
+	$effect(() => {
+		settings.isPaused = !isLoopRunning;
+		return () => {
+			settings.isPaused = false;
+		};
+	});
+
 	// The ship should evolve based on the current run's score OR the all-time local best
 	let effectiveBest = $derived(Math.max(score, personalBest));
-	
+
 	let playerEmoji = $derived.by(() => {
 		if (effectiveBest >= 1500) return '👾';
 		if (effectiveBest >= 750) return '🛰️';
@@ -205,7 +221,7 @@
 		ArrowRight: false
 	});
 
-	let isAnyKeyPressed = $derived(Object.values(keys).some(k => k));
+	let isAnyKeyPressed = $derived(Object.values(keys).some((k) => k));
 
 	let asteroids = $state(
 		Array.from({ length: 5 }, (_, i) => ({
@@ -282,7 +298,7 @@
 		if (Math.abs(velocity.x) > 1 || Math.abs(velocity.y) > 1) {
 			const id = Math.random();
 			const effect = settings.trailEffect;
-			
+
 			let newParticle: Particle = {
 				id,
 				x: charPos.x + charSize / 2,
@@ -342,10 +358,19 @@
 			if (!taxCollector.active && Math.random() < 0.002) {
 				const side = Math.floor(Math.random() * 4);
 				if (typeof window !== 'undefined') {
-					if (side === 0) { taxCollector.x = Math.random() * window.innerWidth; taxCollector.y = -50; }
-					else if (side === 1) { taxCollector.x = window.innerWidth + 50; taxCollector.y = Math.random() * window.innerHeight; }
-					else if (side === 2) { taxCollector.x = Math.random() * window.innerWidth; taxCollector.y = window.innerHeight + 50; }
-					else { taxCollector.x = -50; taxCollector.y = Math.random() * window.innerHeight; }
+					if (side === 0) {
+						taxCollector.x = Math.random() * window.innerWidth;
+						taxCollector.y = -50;
+					} else if (side === 1) {
+						taxCollector.x = window.innerWidth + 50;
+						taxCollector.y = Math.random() * window.innerHeight;
+					} else if (side === 2) {
+						taxCollector.x = Math.random() * window.innerWidth;
+						taxCollector.y = window.innerHeight + 50;
+					} else {
+						taxCollector.x = -50;
+						taxCollector.y = Math.random() * window.innerHeight;
+					}
 					taxCollector.active = true;
 				}
 			}
@@ -356,14 +381,19 @@
 				const angle = Math.atan2(dy, dx);
 				taxCollector.vx += Math.cos(angle) * 0.1 * timeScale;
 				taxCollector.vy += Math.sin(angle) * 0.1 * timeScale;
-				taxCollector.vx *= (1 - (1 - 0.98) * timeScale);
-				taxCollector.vy *= (1 - (1 - 0.98) * timeScale);
+				taxCollector.vx *= 1 - (1 - 0.98) * timeScale;
+				taxCollector.vy *= 1 - (1 - 0.98) * timeScale;
 				taxCollector.x += taxCollector.vx * timeScale;
 				taxCollector.y += taxCollector.vy * timeScale;
 
 				// Despawn if too far away
 				if (typeof window !== 'undefined') {
-					if (taxCollector.x < -200 || taxCollector.x > window.innerWidth + 200 || taxCollector.y < -200 || taxCollector.y > window.innerHeight + 200) {
+					if (
+						taxCollector.x < -200 ||
+						taxCollector.x > window.innerWidth + 200 ||
+						taxCollector.y < -200 ||
+						taxCollector.y > window.innerHeight + 200
+					) {
 						taxCollector.active = false;
 					}
 				}
@@ -371,11 +401,11 @@
 
 			// Tower Attack logic
 			if (tower.active) {
-				tower.attackTimer -= (1 * timeScale);
+				tower.attackTimer -= 1 * timeScale;
 				if (tower.attackTimer <= 0) {
 					await towerAttack();
 					// Base cooldown is 3s (90 frames at 30fps), reduces per level
-					const cooldown = Math.max(15, 90 / (1 + tower.level * 0.5)); 
+					const cooldown = Math.max(15, 90 / (1 + tower.level * 0.5));
 					tower.attackTimer = cooldown;
 				}
 			}
@@ -396,7 +426,7 @@
 
 			// Input handling
 			const currentAccel = acceleration;
-			
+
 			if (isAnyKeyPressed) {
 				isFollowingClick = false;
 				if (keys.ArrowUp) velocity.y -= currentAccel;
@@ -407,7 +437,7 @@
 				const dx = targetPos.x - charPos.x;
 				const dy = targetPos.y - charPos.y;
 				const distance = Math.sqrt(dx * dx + dy * dy);
-	
+
 				if (distance > 10) {
 					const angle = Math.atan2(dy, dx);
 					velocity.x += Math.cos(angle) * currentAccel;
@@ -436,14 +466,14 @@
 
 			if (distW < pullRadius) {
 				// Linear interpolation between maxPullForce (center) and minPullForce (edge)
-				const t = 1 - (distW / pullRadius); // 1 at center, 0 at edge
+				const t = 1 - distW / pullRadius; // 1 at center, 0 at edge
 				const pull = (minPullForce + (maxPullForce - minPullForce) * t) * timeScale;
-				
+
 				const angleW = Math.atan2(dyW, dxW);
 				velocity.x += Math.cos(angleW) * pull;
 				velocity.y += Math.sin(angleW) * pull;
 			}
-					
+
 			velocity.x *= friction;
 			velocity.y *= friction;
 
@@ -455,19 +485,23 @@
 			planet.y += planet.vy * timeScale;
 
 			// Update meteorites position
-			meteorites.forEach(m => {
+			meteorites.forEach((m) => {
 				m.y += m.speed * timeScale;
 				m.x += m.vx * timeScale;
 				// The comet emoji (☄️) is drawn at ~135 degrees (pointing down-right)
 				// We want its head to point in the direction of velocity (atan2(speed, vx))
-				m.angle = (Math.atan2(m.speed, m.vx) * 180 / Math.PI) - 135;
-				
-				if (typeof window !== 'undefined' && (m.y > window.innerHeight + 100 || m.x < -100 || m.x > window.innerWidth + 100)) {
+				m.angle = (Math.atan2(m.speed, m.vx) * 180) / Math.PI - 135;
+
+				if (
+					typeof window !== 'undefined' &&
+					(m.y > window.innerHeight + 100 || m.x < -100 || m.x > window.innerWidth + 100)
+				) {
 					m.y = -150;
 					m.x = Math.random() * window.innerWidth;
 					m.vx = (Math.random() - 0.5) * 6;
 					m.speed = 6 + Math.random() * 8;
-					m.type = Math.random() < 0.05 ? junkEmojis[Math.floor(Math.random() * junkEmojis.length)] : '☄️';
+					m.type =
+						Math.random() < 0.05 ? junkEmojis[Math.floor(Math.random() * junkEmojis.length)] : '☄️';
 				}
 			});
 
@@ -508,7 +542,7 @@
 				const normalizedDiff = ((diff + 180) % 360) - 180;
 				rotation += normalizedDiff * 0.1;
 			}
-					
+
 			await checkCollisions();
 		}
 	}
@@ -517,7 +551,7 @@
 		try {
 			const res = await fetch('/api/leaderboard');
 			const data = await res.json();
-			
+
 			// Always update TTL if provided
 			if (data && typeof data.resetIn === 'number') {
 				leaderboardTTL = data.resetIn;
@@ -535,7 +569,7 @@
 
 	// Format TTL to HH:MM:SS
 	let formattedTTL = $derived.by(() => {
-		if (leaderboardTTL <= 0) return "RESETTING...";
+		if (leaderboardTTL <= 0) return 'RESETTING...';
 		const h = Math.floor(leaderboardTTL / 3600);
 		const m = Math.floor((leaderboardTTL % 3600) / 60);
 		const s = Math.floor(leaderboardTTL % 60);
@@ -567,9 +601,9 @@
 					message: newHighScoreMessage
 				})
 			});
-			
+
 			const data = await res.json();
-			
+
 			if (res.ok) {
 				showHighScorePrompt = false;
 				newHighScoreMessage = '';
@@ -586,7 +620,7 @@
 	}
 
 	function spawnPlanet() {
-		if (typeof window === 'undefined') return;
+		if (typeof window === 'undefined' || !isLoopRunning) return;
 		planet.x = Math.random() * (window.innerWidth - 100) + 50;
 		planet.y = Math.random() * (window.innerHeight - 100) + 50;
 		planet.vx = (Math.random() - 0.5) * 3;
@@ -597,7 +631,7 @@
 	onMount(() => {
 		fetchLeaderboard();
 		startSession();
-		
+
 		// Local countdown for the TTL
 		const ttlInterval = setInterval(() => {
 			if (leaderboardTTL > 0) leaderboardTTL -= 1;
@@ -618,51 +652,52 @@
 			if (storedTrailEffect) settings.trailEffect = storedTrailEffect;
 		}
 
-		const pollInterval = setInterval(fetchLeaderboard, 10000);
+		const pollInterval = setInterval(() => {
+			if (isLoopRunning) fetchLeaderboard();
+		}, 10000);
 		// Initialize positions based on screen size
 		if (typeof window !== 'undefined') {
 			charPos = { x: window.innerWidth * 0.2, y: window.innerHeight * 0.2 };
 			targetPos = { ...charPos };
 			warp.x = window.innerWidth * 0.7;
 			warp.y = window.innerHeight * 0.3;
-			
+
 			spawnPlanet();
-			
-							asteroids = Array.from({ length: 5 }, (_, i) => ({
-							id: i,
-							x: Math.random() * (window.innerWidth - 100) + 50,
-							y: Math.random() * (window.innerHeight - 100) + 50,
-							exploded: false
-						}));
-			
-												meteorites[0].x = Math.random() * (window.innerWidth - 100) + 50;
-												meteorites[0].type = '☄️';
-												spawnZapBonus();
-												spawnShieldBonus();
-												spawnTowerBonus();
-											}
-		
+
+			asteroids = Array.from({ length: 5 }, (_, i) => ({
+				id: i,
+				x: Math.random() * (window.innerWidth - 100) + 50,
+				y: Math.random() * (window.innerHeight - 100) + 50,
+				exploded: false
+			}));
+
+			meteorites[0].x = Math.random() * (window.innerWidth - 100) + 50;
+			meteorites[0].type = '☄️';
+			spawnZapBonus();
+			spawnShieldBonus();
+			spawnTowerBonus();
+		}
+
 		let lastTime = performance.now();
 		let frame: number;
-		let isRunning = true;
 
 		async function loop(currentTime: number) {
-			if (!isRunning) return;
+			if (!isLoopRunning) return;
 			frame = requestAnimationFrame(loop);
-			
+
 			const deltaTime = currentTime - lastTime;
 			const interval = 1000 / 30;
 
 			if (deltaTime < interval) return;
 			lastTime = currentTime - (deltaTime % interval);
-			
+
 			await update();
 		}
 
 		frame = requestAnimationFrame(loop);
 
 		return () => {
-			isRunning = false;
+			isLoopRunning = false;
 			cancelAnimationFrame(frame);
 			clearInterval(pollInterval);
 			clearInterval(ttlInterval);
@@ -671,7 +706,7 @@
 	});
 
 	function spawnAsteroid() {
-		if (typeof window === 'undefined') return;
+		if (typeof window === 'undefined' || !isLoopRunning) return;
 		const id = Math.random();
 		// Avoid spawning too close to the character's current position
 		let newX, newY, dist;
@@ -683,30 +718,33 @@
 			dist = Math.sqrt(dx * dx + dy * dy);
 		} while (dist < 200); // Keep 200px distance from player
 
-		asteroids = [...asteroids, {
-			id,
-			x: newX,
-			y: newY,
-			exploded: false
-		}];
+		asteroids = [
+			...asteroids,
+			{
+				id,
+				x: newX,
+				y: newY,
+				exploded: false
+			}
+		];
 	}
 
 	function spawnZapBonus() {
-		if (typeof window === 'undefined') return;
+		if (typeof window === 'undefined' || !isLoopRunning) return;
 		zapBonus.x = Math.random() * (window.innerWidth - 100) + 50;
 		zapBonus.y = Math.random() * (window.innerHeight - 100) + 50;
 		zapBonus.active = true;
 	}
 
 	function spawnTimeWarpBonus() {
-		if (typeof window === 'undefined') return;
+		if (typeof window === 'undefined' || !isLoopRunning) return;
 		timeWarpBonus.x = Math.random() * (window.innerWidth - 100) + 50;
 		timeWarpBonus.y = Math.random() * (window.innerHeight - 100) + 50;
 		timeWarpBonus.active = true;
 	}
 
 	function spawnTowerBonus() {
-		if (typeof window === 'undefined') return;
+		if (typeof window === 'undefined' || !isLoopRunning) return;
 		towerBonus.x = Math.random() * (window.innerWidth - 100) + 50;
 		towerBonus.y = Math.random() * (window.innerHeight - 100) + 50;
 		towerBonus.active = true;
@@ -714,14 +752,14 @@
 
 	async function towerAttack() {
 		if (!tower.active || meteorites.length === 0) return;
-		
-		// Target nearest meteorite
+
+		// Target meteorite closest to the player
 		let nearest = null;
 		let minDist = Infinity;
-		
+
 		for (const m of meteorites) {
-			const dx = m.x - tower.x;
-			const dy = m.y - tower.y;
+			const dx = m.x - charPos.x;
+			const dy = m.y - charPos.y;
 			const dist = Math.sqrt(dx * dx + dy * dy);
 			if (dist < minDist) {
 				minDist = dist;
@@ -735,7 +773,7 @@
 			towerLaser.y1 = tower.y + 30;
 			towerLaser.x2 = nearest.x + 30;
 			towerLaser.y2 = nearest.y + 30;
-			
+
 			const dx = towerLaser.x2 - towerLaser.x1;
 			const dy = towerLaser.y2 - towerLaser.y1;
 			towerLaser.length = Math.sqrt(dx * dx + dy * dy);
@@ -758,21 +796,34 @@
 		safeTimeout(() => {
 			timeScale = 1.0;
 			timeWarpActive = false;
-		}, 5000);
+		}, 7000);
 	}
 
 	function zapMeteorite() {
 		if (meteorites.length === 0) return;
-		// Choose a random meteorite
-		const index = Math.floor(Math.random() * meteorites.length);
-		const target = meteorites[index];
-		
+
+		// Target meteorite closest to the player
+		let nearest = meteorites[0];
+		let minDist = Infinity;
+
+		for (const m of meteorites) {
+			const dx = m.x - charPos.x;
+			const dy = m.y - charPos.y;
+			const dist = Math.sqrt(dx * dx + dy * dy);
+			if (dist < minDist) {
+				minDist = dist;
+				nearest = m;
+			}
+		}
+
+		const target = nearest;
+
 		// Set laser positions starting from player center to target center
 		activeLaser.x1 = charPos.x + charSize / 2;
 		activeLaser.y1 = charPos.y + charSize / 2;
 		activeLaser.x2 = target.x + 30; // Approx center of 4rem meteorite
 		activeLaser.y2 = target.y + 30;
-		
+
 		const dx = activeLaser.x2 - activeLaser.x1;
 		const dy = activeLaser.y2 - activeLaser.y1;
 		activeLaser.length = Math.sqrt(dx * dx + dy * dy);
@@ -790,7 +841,7 @@
 	}
 
 	function spawnShieldBonus() {
-		if (typeof window === 'undefined' || hasShield || shieldBonus.active) return;
+		if (typeof window === 'undefined' || hasShield || shieldBonus.active || !isLoopRunning) return;
 		shieldBonus.x = Math.random() * (window.innerWidth - 100) + 50;
 		shieldBonus.y = Math.random() * (window.innerHeight - 100) + 50;
 		shieldBonus.active = true;
@@ -801,7 +852,7 @@
 		const dxW = warp.x - (charPos.x + charSize / 2);
 		const dyW = warp.y - (charPos.y + charSize / 2);
 		const distW = Math.sqrt(dxW * dxW + dyW * dyW);
-		
+
 		if (distW < 300) {
 			const stretch = 1 + (300 - distW) / 50;
 			return `scale(${stretch}, ${1 / Math.sqrt(stretch)})`;
@@ -811,7 +862,7 @@
 
 	async function checkCollisions() {
 		if (typeof window === 'undefined' || gameOver) return;
-		
+
 		const charCenterX = charPos.x + charSize / 2;
 		const charCenterY = charPos.y + charSize / 2;
 
@@ -823,7 +874,7 @@
 			if (dist < 40) {
 				taxCollector.active = false;
 				triggerShake();
-				
+
 				if (hasShield) {
 					hasShield = false;
 					safeTimeout(spawnShieldBonus, 3000);
@@ -852,8 +903,9 @@
 				return true;
 			}
 			gameOver = true;
+			isLoopRunning = false;
 			currentDeathMessage = deathMessages[Math.floor(Math.random() * deathMessages.length)];
-			
+
 			// Update personal best
 			if (score > personalBest) {
 				personalBest = score;
@@ -980,7 +1032,7 @@
 				const dx = charCenterX - (ast.x + 20);
 				const dy = charCenterY - (ast.y + 20);
 				const distance = Math.sqrt(dx * dx + dy * dy);
-				
+
 				if (distance < (charSize + 30) / 2) {
 					ast.exploded = true;
 					score += 10;
@@ -1002,12 +1054,12 @@
 
 					// Check if we should spawn an extra asteroid (every 50 points)
 					const targetAsteroidCount = 5 + Math.floor(score / 50);
-					
+
 					safeTimeout(() => {
 						asteroids = asteroids.filter((a) => a.id !== ast.id);
 						// Always spawn at least one to replace the collected one
 						spawnAsteroid();
-						
+
 						// If our current count is less than target, spawn more!
 						if (asteroids.length < targetAsteroidCount) {
 							spawnAsteroid();
@@ -1019,6 +1071,7 @@
 	}
 
 	function restart() {
+		isLoopRunning = true;
 		charPos = { x: 100, y: 100 };
 		velocity = { x: 0, y: 0 };
 		score = 0;
@@ -1043,21 +1096,23 @@
 		spawnShieldBonus();
 		spawnTowerBonus();
 		spawnPlanet();
-		
+
 		if (typeof window !== 'undefined') {
 			warp.x = window.innerWidth / 2;
 			warp.y = window.innerHeight / 2;
 		}
 
-		meteorites = [{
-			id: Math.random(),
-			x: Math.random() * (typeof window !== 'undefined' ? window.innerWidth - 100 : 800) + 50,
-			y: -150,
-			speed: 6 + Math.random() * 8,
-			vx: (Math.random() - 0.5) * 6,
-			angle: 0,
-			type: '☄️'
-		}];
+		meteorites = [
+			{
+				id: Math.random(),
+				x: Math.random() * (typeof window !== 'undefined' ? window.innerWidth - 100 : 800) + 50,
+				y: -150,
+				speed: 6 + Math.random() * 8,
+				vx: (Math.random() - 0.5) * 6,
+				angle: 0,
+				type: '☄️'
+			}
+		];
 	}
 
 	/**
@@ -1074,7 +1129,7 @@
 	function handlePointerDown(event: PointerEvent) {
 		// Prevent click handling if we're clicking the navigation
 		if (event.target instanceof HTMLAnchorElement) return;
-		
+
 		targetPos.x = event.clientX - charSize / 2;
 		targetPos.y = event.clientY - charSize / 2;
 		isFollowingClick = true;
@@ -1106,8 +1161,12 @@
 	onkeyup={handleKeyup}
 />
 
-<div class="game-container">
-	<div class="shake-layer" class:shake={isShaking && settings.enableShake} class:time-warp={timeWarpActive}>
+<div class="game-container" class:paused={!isLoopRunning}>
+	<div
+		class="shake-layer"
+		class:shake={isShaking && settings.enableShake}
+		class:time-warp={timeWarpActive}
+	>
 		{#each particles as p (p.id)}
 			<div
 				class="particle"
@@ -1120,7 +1179,9 @@
 					width: {p.size}px; 
 					height: {p.size}px; 
 					opacity: {p.life};
-					background: {p.effectType === 'classic' ? 'radial-gradient(circle, #ff9d00 0%, #ff4400 100%)' : p.color};
+					background: {p.effectType === 'classic'
+					? 'radial-gradient(circle, #ff9d00 0%, #ff4400 100%)'
+					: p.color};
 					--particle-color: {p.color};
 				"
 			>
@@ -1131,16 +1192,12 @@
 		{/each}
 
 		{#each asteroids as ast (ast.id)}
-			<div 
-				class="asteroid"
-				class:exploding={ast.exploded}
-				style="left: {ast.x}px; top: {ast.y}px;"
-			>
+			<div class="asteroid" class:exploding={ast.exploded} style="left: {ast.x}px; top: {ast.y}px;">
 				{ast.exploded ? '✨' : '⭐'}
 			</div>
 		{/each}
 
-		<div 
+		<div
 			class="warp-vortex"
 			style="left: {warp.x}px; top: {warp.y}px; width: {warp.size}px; height: {warp.size}px; transform: translate(-50%, -50%) rotate({warp.angle}deg);"
 		>
@@ -1149,7 +1206,10 @@
 			<div class="gravity-field" style="width: 3072px; height: 3072px;"></div>
 		</div>
 
-		<div class="character" style="left: {charPos.x}px; top: {charPos.y}px; transform: rotate({rotation}deg) {spaghettiScale}; filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.5));">
+		<div
+			class="character"
+			style="left: {charPos.x}px; top: {charPos.y}px; transform: rotate({rotation}deg) {spaghettiScale}; filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.5));"
+		>
 			{#if hasShield}
 				<div class="shield-effect"></div>
 			{/if}
@@ -1157,9 +1217,7 @@
 		</div>
 
 		{#if zapBonus.active}
-			<div class="bonus-zap" style="left: {zapBonus.x}px; top: {zapBonus.y}px;">
-				📡
-			</div>
+			<div class="bonus-zap" style="left: {zapBonus.x}px; top: {zapBonus.y}px;">📡</div>
 		{/if}
 
 		{#if timeWarpBonus.active}
@@ -1169,17 +1227,22 @@
 		{/if}
 
 		{#if shieldBonus.active}
-			<div class="bonus-shield" style="left: {shieldBonus.x}px; top: {shieldBonus.y}px;">
-				🛡️
-			</div>
+			<div class="bonus-shield" style="left: {shieldBonus.x}px; top: {shieldBonus.y}px;">🛡️</div>
 		{/if}
 
-		<div class="planet" class:exploded={planet.exploded} style="left: {planet.x}px; top: {planet.y}px;">
+		<div
+			class="planet"
+			class:exploded={planet.exploded}
+			style="left: {planet.x}px; top: {planet.y}px;"
+		>
 			{planet.exploded ? '🌋' : '🪐'}
 		</div>
 
 		{#each meteorites as m (m.id)}
-			<div class="falling-asteroid" style="left: {m.x}px; top: {m.y}px; transform: rotate({m.angle}deg);">
+			<div
+				class="falling-asteroid"
+				style="left: {m.x}px; top: {m.y}px; transform: rotate({m.angle}deg);"
+			>
 				{m.type || '☄️'}
 				{#if m.type && m.type !== '☄️'}
 					<div class="junk-label">Celestial Clutter</div>
@@ -1188,20 +1251,22 @@
 		{/each}
 
 		{#if taxCollector.active}
-			<div class="tax-collector" style="left: {taxCollector.x}px; top: {taxCollector.y}px;">
-				🕴️
-			</div>
+			<div class="tax-collector" style="left: {taxCollector.x}px; top: {taxCollector.y}px;">🕴️</div>
 		{/if}
 
 		{#if taxedPopup.active}
-			<div class="taxed-popup" style="left: {taxedPopup.x}px; top: {taxedPopup.y}px; opacity: {taxedPopup.timer / 120}; color: {taxedPopup.text === 'BLOCKED!' ? '#10b981' : '#ff4444'};">
+			<div
+				class="taxed-popup"
+				style="left: {taxedPopup.x}px; top: {taxedPopup.y}px; opacity: {taxedPopup.timer /
+					120}; color: {taxedPopup.text === 'BLOCKED!' ? '#10b981' : '#ff4444'};"
+			>
 				{taxedPopup.text}
 			</div>
 		{/if}
 
 		{#if activeLaser.active}
-			<div 
-				class="laser-beam" 
+			<div
+				class="laser-beam"
 				style="left: {activeLaser.x1}px; top: {activeLaser.y1}px; width: {activeLaser.length}px; transform: rotate({activeLaser.angle}deg);"
 			></div>
 		{/if}
@@ -1214,14 +1279,12 @@
 		{/if}
 
 		{#if towerBonus.active}
-			<div class="bonus-tower" style="left: {towerBonus.x}px; top: {towerBonus.y}px;">
-				🏰
-			</div>
+			<div class="bonus-tower" style="left: {towerBonus.x}px; top: {towerBonus.y}px;">🏰</div>
 		{/if}
 
 		{#if towerLaser.active}
-			<div 
-				class="tower-laser" 
+			<div
+				class="tower-laser"
 				style="left: {towerLaser.x1}px; top: {towerLaser.y1}px; width: {towerLaser.length}px; transform: rotate({towerLaser.angle}deg);"
 			></div>
 		{/if}
@@ -1233,16 +1296,16 @@
 				<h1 class="new-record">NEW GALAXY RECORD!</h1>
 				<p>Your score of {score} is the best in the universe.</p>
 				<div class="input-group">
-					<input 
-						type="text" 
-						bind:value={newHighScoreUsername} 
+					<input
+						type="text"
+						bind:value={newHighScoreUsername}
 						placeholder="Pilot Name"
 						maxlength="20"
 						disabled={isSubmitting}
 					/>
-					<input 
-						type="text" 
-						bind:value={newHighScoreMessage} 
+					<input
+						type="text"
+						bind:value={newHighScoreMessage}
 						placeholder="Attach radio message (Optional)"
 						maxlength="100"
 						disabled={isSubmitting}
@@ -1257,7 +1320,7 @@
 			{:else}
 				<h1>GAME OVER</h1>
 				<p>{currentDeathMessage}</p>
-				
+
 				<div class="unlocks-preview">
 					<div class="unlock-item" class:locked={personalBest < 250}>
 						<span class="unlock-emoji">🛸</span>
@@ -1275,7 +1338,7 @@
 
 				<div class="actions">
 					<button onclick={restart}>Try Again</button>
-					<button class="secondary" onclick={() => showCustomizer = true}>Customize Ship</button>
+					<button class="secondary" onclick={() => (showCustomizer = true)}>Customize Ship</button>
 				</div>
 			{/if}
 		</div>
@@ -1313,21 +1376,36 @@
 			<div class="customizer-header">
 				<h2>Ship Customization</h2>
 			</div>
-			
+
 			<div class="customizer-content">
 				<div class="custom-section">
 					<h3>Trail Effect</h3>
 					<div class="option-grid">
-						<button class:active={settings.trailEffect === 'classic'} onclick={() => selectTrailEffect('classic')}>
+						<button
+							class:active={settings.trailEffect === 'classic'}
+							onclick={() => selectTrailEffect('classic')}
+						>
 							Classic
 						</button>
-						<button class:active={settings.trailEffect === 'plasma'} class:premium={!settings.isSupporter} onclick={() => selectTrailEffect('plasma')}>
+						<button
+							class:active={settings.trailEffect === 'plasma'}
+							class:premium={!settings.isSupporter}
+							onclick={() => selectTrailEffect('plasma')}
+						>
 							Plasma {!settings.isSupporter ? '🔒' : ''}
 						</button>
-						<button class:active={settings.trailEffect === 'ghost'} class:premium={!settings.isSupporter} onclick={() => selectTrailEffect('ghost')}>
+						<button
+							class:active={settings.trailEffect === 'ghost'}
+							class:premium={!settings.isSupporter}
+							onclick={() => selectTrailEffect('ghost')}
+						>
 							Ghost {!settings.isSupporter ? '🔒' : ''}
 						</button>
-						<button class:active={settings.trailEffect === 'rainbow'} class:premium={!settings.isSupporter} onclick={() => selectTrailEffect('rainbow')}>
+						<button
+							class:active={settings.trailEffect === 'rainbow'}
+							class:premium={!settings.isSupporter}
+							onclick={() => selectTrailEffect('rainbow')}
+						>
 							Rainbow {!settings.isSupporter ? '🔒' : ''}
 						</button>
 					</div>
@@ -1337,8 +1415,8 @@
 					<h3>Trail Color</h3>
 					<div class="color-grid">
 						{#each ['#ff9d00', '#00f2ff', '#10b981', '#f43f5e', '#8b5cf6', '#ffffff'] as c}
-							<button 
-								class="color-btn" 
+							<button
+								class="color-btn"
 								class:active={settings.trailColor === c}
 								class:locked={!settings.isSupporter && c !== '#ff9d00'}
 								style="background: {c}; --particle-color: {c};"
@@ -1358,13 +1436,15 @@
 				{:else}
 					<div class="supporter-pitch bought">
 						<p>You are a Supporter! ✨</p>
-						<button class="buy-btn secondary-gold" onclick={() => showNothingModal = true}>Buy it again!</button>
+						<button class="buy-btn secondary-gold" onclick={() => (showNothingModal = true)}
+							>Buy it again!</button
+						>
 					</div>
 				{/if}
 			</div>
 
 			<div class="customizer-footer">
-				<button class="close-btn" onclick={() => showCustomizer = false}>Close</button>
+				<button class="close-btn" onclick={() => (showCustomizer = false)}>Close</button>
 			</div>
 		</div>
 	{/if}
@@ -1375,7 +1455,9 @@
 			<p class="warning-text">You'll get nothing more!</p>
 			<div class="rich-actions">
 				<button class="buy-btn" onclick={redirectToDonation}>I know that!</button>
-				<button class="close-btn" onclick={() => showNothingModal = false}>Actually, maybe once is enough</button>
+				<button class="close-btn" onclick={() => (showNothingModal = false)}
+					>Actually, maybe once is enough</button
+				>
 			</div>
 		</div>
 	{/if}
@@ -1386,7 +1468,9 @@
 			<p class="warning-text">I don't know if it works, take it at your own risk!</p>
 			<div class="rich-actions">
 				<button class="buy-btn" onclick={redirectToPaypal}>I know, I'm just too rich!</button>
-				<button class="close-btn" onclick={() => showRichModal = false}>Wait, I'm actually sensible</button>
+				<button class="close-btn" onclick={() => (showRichModal = false)}
+					>Wait, I'm actually sensible</button
+				>
 			</div>
 		</div>
 	{/if}
@@ -1409,6 +1493,11 @@
 		height: 100vh;
 		position: relative;
 		overflow: hidden;
+	}
+
+	.game-container.paused * {
+		animation-play-state: paused !important;
+		transition: none !important;
 	}
 
 	.shake-layer {
@@ -1457,8 +1546,12 @@
 	}
 
 	@keyframes rainbow-cycle {
-		from { filter: hue-rotate(0deg) blur(2px); }
-		to { filter: hue-rotate(360deg) blur(2px); }
+		from {
+			filter: hue-rotate(0deg) blur(2px);
+		}
+		to {
+			filter: hue-rotate(360deg) blur(2px);
+		}
 	}
 
 	.actions {
@@ -1486,7 +1579,9 @@
 		flex-direction: column;
 		background: linear-gradient(145deg, rgba(10, 15, 30, 0.98), rgba(20, 25, 45, 0.98));
 		border: 1px solid rgba(100, 200, 255, 0.2);
-		box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 242, 255, 0.1) inset;
+		box-shadow:
+			0 30px 60px -15px rgba(0, 0, 0, 0.8),
+			0 0 20px rgba(0, 242, 255, 0.1) inset;
 		animation: modal-enter 0.5s cubic-bezier(0.2, 1, 0.3, 1);
 		border-radius: 1.5rem;
 		padding: 0;
@@ -1540,15 +1635,32 @@
 			max-height: 95vh;
 			border-radius: 1rem;
 		}
-		.customizer h2 { font-size: 1.2rem; }
-		.custom-section { padding: 1rem; }
-		.option-grid { gap: 0.5rem; }
-		.color-btn { width: 36px; height: 36px; }
+		.customizer h2 {
+			font-size: 1.2rem;
+		}
+		.custom-section {
+			padding: 1rem;
+		}
+		.option-grid {
+			gap: 0.5rem;
+		}
+		.color-btn {
+			width: 36px;
+			height: 36px;
+		}
 	}
 
 	@keyframes modal-enter {
-		from { opacity: 0; transform: translate(-50%, -40%) scale(0.9); filter: blur(10px); }
-		to { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: blur(0); }
+		from {
+			opacity: 0;
+			transform: translate(-50%, -40%) scale(0.9);
+			filter: blur(10px);
+		}
+		to {
+			opacity: 1;
+			transform: translate(-50%, -50%) scale(1);
+			filter: blur(0);
+		}
 	}
 
 	.modal {
@@ -1594,7 +1706,7 @@
 		content: '';
 		flex: 1;
 		height: 1px;
-		background: linear-gradient(to right, rgba(0,242,255,0.3), transparent);
+		background: linear-gradient(to right, rgba(0, 242, 255, 0.3), transparent);
 	}
 
 	.option-grid {
@@ -1631,14 +1743,19 @@
 		background: rgba(0, 242, 255, 0.1);
 		border-color: #00f2ff;
 		color: #fff;
-		box-shadow: 0 0 20px rgba(0, 242, 255, 0.2), inset 0 0 10px rgba(0, 242, 255, 0.1);
+		box-shadow:
+			0 0 20px rgba(0, 242, 255, 0.2),
+			inset 0 0 10px rgba(0, 242, 255, 0.1);
 		text-shadow: 0 0 10px rgba(0, 242, 255, 0.5);
 	}
 
 	.option-grid button.active::before {
 		content: '';
 		position: absolute;
-		top: 0; left: 0; width: 4px; height: 100%;
+		top: 0;
+		left: 0;
+		width: 4px;
+		height: 100%;
 		background: #00f2ff;
 		box-shadow: 0 0 15px #00f2ff;
 	}
@@ -1665,7 +1782,7 @@
 		cursor: pointer;
 		transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 		position: relative;
-		box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+		box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
 	}
 
 	.color-btn:not(.locked):hover {
@@ -1678,7 +1795,9 @@
 		border-color: #fff;
 		border-width: 3px;
 		transform: scale(1.25);
-		box-shadow: 0 0 25px var(--particle-color), inset 0 0 10px rgba(255,255,255,0.5);
+		box-shadow:
+			0 0 25px var(--particle-color),
+			inset 0 0 10px rgba(255, 255, 255, 0.5);
 	}
 
 	.color-btn.locked {
@@ -1694,7 +1813,7 @@
 		left: 50%;
 		transform: translate(-50%, -50%);
 		font-size: 1.2rem;
-		text-shadow: 0 2px 5px rgba(0,0,0,0.9);
+		text-shadow: 0 2px 5px rgba(0, 0, 0, 0.9);
 	}
 
 	.supporter-pitch {
@@ -1712,15 +1831,27 @@
 	.supporter-pitch::before {
 		content: '';
 		position: absolute;
-		top: -50%; left: -50%; width: 200%; height: 200%;
-		background: conic-gradient(from 0deg, transparent 0deg, rgba(255,215,0,0.2) 90deg, transparent 180deg);
+		top: -50%;
+		left: -50%;
+		width: 200%;
+		height: 200%;
+		background: conic-gradient(
+			from 0deg,
+			transparent 0deg,
+			rgba(255, 215, 0, 0.2) 90deg,
+			transparent 180deg
+		);
 		animation: radar-sweep 4s linear infinite;
 		pointer-events: none;
 	}
 
 	@keyframes radar-sweep {
-		from { transform: rotate(0deg); }
-		to { transform: rotate(360deg); }
+		from {
+			transform: rotate(0deg);
+		}
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	.supporter-pitch p {
@@ -1730,7 +1861,7 @@
 		position: relative;
 		z-index: 1;
 		font-weight: 600;
-		text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+		text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 		letter-spacing: 1px;
 	}
 
@@ -1795,7 +1926,9 @@
 		max-width: 420px;
 		background: linear-gradient(145deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.98));
 		border: 2px solid #ef4444;
-		box-shadow: 0 0 40px rgba(239, 68, 68, 0.2), 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+		box-shadow:
+			0 0 40px rgba(239, 68, 68, 0.2),
+			0 25px 50px -12px rgba(0, 0, 0, 0.8);
 		padding: 2.5rem;
 		animation: modal-enter 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 	}
@@ -1877,8 +2010,13 @@
 	}
 
 	@keyframes pulse-gold {
-		0%, 100% { text-shadow: 0 0 10px #ffd700; }
-		50% { text-shadow: 0 0 30px #ffd700; }
+		0%,
+		100% {
+			text-shadow: 0 0 10px #ffd700;
+		}
+		50% {
+			text-shadow: 0 0 30px #ffd700;
+		}
 	}
 
 	.input-group {
@@ -1946,8 +2084,14 @@
 	}
 
 	@keyframes radio-in {
-		from { opacity: 0; transform: translate(-50%, 20px); }
-		to { opacity: 1; transform: translate(-50%, 0); }
+		from {
+			opacity: 0;
+			transform: translate(-50%, 20px);
+		}
+		to {
+			opacity: 1;
+			transform: translate(-50%, 0);
+		}
 	}
 
 	.last-tries {
@@ -2024,25 +2168,47 @@
 		transform: translate(-50%, -50%);
 		border: 4px solid #10b981;
 		border-radius: 50%;
-		box-shadow: 0 0 20px #10b981, inset 0 0 20px #10b981;
+		box-shadow:
+			0 0 20px #10b981,
+			inset 0 0 20px #10b981;
 		opacity: 0.6;
 		animation: shield-vibrate 0.2s infinite;
 	}
 
 	@keyframes pulse-shield {
-		0%, 100% { transform: scale(1); filter: drop-shadow(0 0 10px #10b981); }
-		50% { transform: scale(1.3); filter: drop-shadow(0 0 25px #10b981); }
+		0%,
+		100% {
+			transform: scale(1);
+			filter: drop-shadow(0 0 10px #10b981);
+		}
+		50% {
+			transform: scale(1.3);
+			filter: drop-shadow(0 0 25px #10b981);
+		}
 	}
 
 	@keyframes shield-vibrate {
-		0% { transform: translate(-50%, -50%) scale(1); }
-		50% { transform: translate(-52%, -48%) scale(1.05); }
-		100% { transform: translate(-50%, -50%) scale(1); }
+		0% {
+			transform: translate(-50%, -50%) scale(1);
+		}
+		50% {
+			transform: translate(-52%, -48%) scale(1.05);
+		}
+		100% {
+			transform: translate(-50%, -50%) scale(1);
+		}
 	}
 
 	@keyframes pulse-bonus {
-		0%, 100% { transform: scale(1); filter: drop-shadow(0 0 10px #00f2ff); }
-		50% { transform: scale(1.3); filter: drop-shadow(0 0 20px #00f2ff); }
+		0%,
+		100% {
+			transform: scale(1);
+			filter: drop-shadow(0 0 10px #00f2ff);
+		}
+		50% {
+			transform: scale(1.3);
+			filter: drop-shadow(0 0 20px #00f2ff);
+		}
 	}
 
 	.asteroid {
@@ -2052,17 +2218,29 @@
 		user-select: none;
 		pointer-events: none;
 		transition: transform 0.2s;
-		animation: float-star 3s ease-in-out infinite, glow-star 2s ease-in-out infinite;
+		animation:
+			float-star 3s ease-in-out infinite,
+			glow-star 2s ease-in-out infinite;
 	}
 
 	@keyframes float-star {
-		0%, 100% { transform: translateY(0); }
-		50% { transform: translateY(-10px); }
+		0%,
+		100% {
+			transform: translateY(0);
+		}
+		50% {
+			transform: translateY(-10px);
+		}
 	}
 
 	@keyframes glow-star {
-		0%, 100% { filter: drop-shadow(0 0 5px #ffd700); }
-		50% { filter: drop-shadow(0 0 20px #ffd700); }
+		0%,
+		100% {
+			filter: drop-shadow(0 0 5px #ffd700);
+		}
+		50% {
+			filter: drop-shadow(0 0 20px #ffd700);
+		}
 	}
 
 	.asteroid.exploding {
@@ -2106,9 +2284,18 @@
 	}
 
 	@keyframes pulse-ring {
-		0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.8; }
-		50% { transform: translate(-50%, -50%) scale(1.2); opacity: 0.2; }
-		100% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.8; }
+		0% {
+			transform: translate(-50%, -50%) scale(0.8);
+			opacity: 0.8;
+		}
+		50% {
+			transform: translate(-50%, -50%) scale(1.2);
+			opacity: 0.2;
+		}
+		100% {
+			transform: translate(-50%, -50%) scale(0.8);
+			opacity: 0.8;
+		}
 	}
 
 	.planet {
@@ -2158,8 +2345,13 @@
 	}
 
 	@keyframes collector-wobble {
-		0%, 100% { transform: scale(1) rotate(0deg); }
-		50% { transform: scale(1.1) rotate(5deg); }
+		0%,
+		100% {
+			transform: scale(1) rotate(0deg);
+		}
+		50% {
+			transform: scale(1.1) rotate(5deg);
+		}
 	}
 
 	.taxed-popup {
@@ -2174,15 +2366,21 @@
 	}
 
 	@keyframes taxed-float {
-		0% { transform: translate(-50%, 0); }
-		100% { transform: translate(-50%, -100px); }
+		0% {
+			transform: translate(-50%, 0);
+		}
+		100% {
+			transform: translate(-50%, -100px);
+		}
 	}
 
 	.laser-beam {
 		position: fixed;
 		height: 4px;
 		background: #00f2ff;
-		box-shadow: 0 0 15px #00f2ff, 0 0 30px #00f2ff;
+		box-shadow:
+			0 0 15px #00f2ff,
+			0 0 30px #00f2ff;
 		z-index: 100;
 		transform-origin: 0 50%;
 		pointer-events: none;
@@ -2301,14 +2499,28 @@
 	}
 
 	@keyframes float {
-		0%, 100% { transform: translate(-50%, 0) rotate(0deg); }
-		50% { transform: translate(-50%, -15px) rotate(5deg); }
+		0%,
+		100% {
+			transform: translate(-50%, 0) rotate(0deg);
+		}
+		50% {
+			transform: translate(-50%, -15px) rotate(5deg);
+		}
 	}
 
 	@keyframes explode {
-		0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-		50% { transform: translate(-50%, -50%) scale(2); opacity: 0.8; }
-		100% { transform: translate(-50%, -50%) scale(3); opacity: 0; }
+		0% {
+			transform: translate(-50%, -50%) scale(1);
+			opacity: 1;
+		}
+		50% {
+			transform: translate(-50%, -50%) scale(2);
+			opacity: 0.8;
+		}
+		100% {
+			transform: translate(-50%, -50%) scale(3);
+			opacity: 0;
+		}
 	}
 
 	.shooting-stars {

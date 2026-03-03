@@ -29,14 +29,28 @@ npm run dev
 npm run dev -- --open
 ```
 
-## Building
+## Production Readiness
 
-To create a production version of your app:
+This project has been audited for security and performance.
 
-```sh
-npm run build
-```
+### Environment Variables
 
-You can preview the production build with `npm run preview`.
+Required for production:
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+- `SESSION_SECRET`: A long random string used for signing session tokens and anti-cheat mechanisms.
+- `KV_REDIS_URL` or `KV_URL`: Redis connection URL for leaderboard and rate limiting.
+- `CRON_SECRET`: Optional. Secret for the `/api/leaderboard/reset` endpoint (Vercel Cron).
+
+### Security Optimizations
+
+- **Strict CSP:** Implemented nonce-based Content Security Policy in `svelte.config.js`.
+- **Security Headers:** Configured HSTS, X-Frame-Options, X-Content-Type-Options, etc., in `src/hooks.server.ts`.
+- **Anti-Cheat:** HMAC-SHA256 signed session tokens and velocity-based score validation in `src/lib/server/security.ts`.
+- **Rate Limiting:** IP-based rate limiting on sensitive API endpoints.
+
+### Performance Optimizations
+
+- **Redis Pipelines:** Combined multiple Redis commands into single network requests to reduce latency.
+- **Throttled Checks:** Leaderboard inactivity resets are throttled to once every 5 minutes per server instance.
+- **Caching:** API endpoints use `Cache-Control` headers for efficient browser and CDN caching.
+- **Compression:** Build-time Brotli and Gzip compression enabled for assets.

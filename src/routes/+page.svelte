@@ -6,8 +6,8 @@
 	let rocket = $state({ x: 0, y: 0, vx: 0, vy: 0 });
 	let isGameOver = $state(false);
 	let animationFrame: number;
-	
-	let globalBest = $state<{username: string, score: number} | null>(null);
+
+	let globalBest = $state<{ username: string; score: number } | null>(null);
 	let leaderboardTTL = $state(0);
 
 	/** @param {PointerEvent} e */
@@ -35,7 +35,7 @@
 
 	// Format TTL to HH:MM:SS
 	let formattedTTL = $derived.by(() => {
-		if (leaderboardTTL <= 0) return "24:00:00";
+		if (leaderboardTTL <= 0) return '24:00:00';
 		const h = Math.floor(leaderboardTTL / 3600);
 		const m = Math.floor((leaderboardTTL % 3600) / 60);
 		const s = Math.floor(leaderboardTTL % 60);
@@ -112,7 +112,7 @@
 <main class:game-over={isGameOver}>
 	<div class="leaderboard-preview">
 		{#if globalBest}
-			<span class="best-label">TOP PILOT:</span> 
+			<span class="best-label">TOP PILOT:</span>
 			<span class="best-value">{globalBest.username} ({globalBest.score})</span>
 		{:else}
 			<span class="best-label">NO RECORDS YET</span>
@@ -120,8 +120,8 @@
 		<div class="reset-info">Reset in: {formattedTTL}</div>
 	</div>
 
-	<div 
-		class="rocket" 
+	<div
+		class="rocket"
 		style="left: {rocket.x}px; top: {rocket.y}px; transform: translate(-50%, -50%) rotate({rocketAngle}deg);"
 	>
 		🚀
@@ -225,7 +225,8 @@
 		pointer-events: none;
 	}
 
-	button, .play-link {
+	button,
+	.play-link {
 		margin-top: 2rem;
 		padding: 0.75rem 2rem;
 		font-size: 1.25rem;
@@ -239,7 +240,8 @@
 		display: inline-block;
 	}
 
-	button:hover, .play-link:hover {
+	button:hover,
+	.play-link:hover {
 		background: #dc2626;
 		transform: scale(1.05);
 	}

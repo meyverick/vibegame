@@ -21,15 +21,18 @@
    - Show a 'Locked' icon for premium effects if `isSupporter` is false.
 
 ### Engineering Constraints
+
 - Use Svelte 5 runes for all reactive state.
 - Ensure all new visual elements are parented inside the `shake-layer` for consistent visual feedback.
 - Use the `safeTimeout` helper for any UI-related timing (e.g., purchase confirmation animations).
 
 ### Execution Phases
+
 - **Phase 1 (Settings Expansion):** Update `settings.svelte.ts` and the `Particle` interface to support customization.
 - **Phase 2 (Visual Implementation):** Implement the 'Plasma', 'Ghost', and 'Rainbow' CSS/JS logic.
 - **Phase 3 (Store & UI):** Build the 'Supporter Store' and customization modal.
 - **Phase 4 (Validation):** Verify that customizations persist after page refresh and build correctly.
 
 ### Termination Criteria
+
 Output the completion promise `<promise>CUSTOMIZATION_LIVE</promise>` only after verifying that all trail effects render correctly and the 'Supporter' status is saved to `localStorage`."

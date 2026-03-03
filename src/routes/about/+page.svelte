@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
+	import { settings } from '$lib/settings.svelte';
 
 	interface LeaderboardEntry {
 		username: string;
@@ -52,14 +53,24 @@
 
 	let activeRadioMessage: { username: string, text: string } | null = $state(null);
 	let radioCooldown = $state(0);
+	let hasShownRadioMessage = $state(false);
+
+	let activeLaser = $state({
+		active: false,
+		x1: 0,
+		y1: 0,
+		x2: 0,
+		y2: 0,
+		angle: 0,
+		length: 0
+	});
 
 	// Velocity magnitude for panic emoji
 	let velocityMagnitude = $derived(Math.sqrt(velocity.x ** 2 + velocity.y ** 2));
 	let playerEmoji = $derived(velocityMagnitude > 15 ? '😱' : '🚀');
 
 	let particles: Particle[] = $state([]);
-	let mobilityBoostLevel = $state(0);
-	let mobilityBonus = $state({
+	let zapBonus = $state({
 		x: -100,
 		y: -100,
 		active: false
@@ -186,13 +197,12 @@
 		if (!gameOver) {
 			if (radioCooldown > 0) {
 				radioCooldown -= 1 / 60; // Approximate seconds
-			} else if (globalBest && globalBest.message && !activeRadioMessage) {
-				// Show message from top player occasionally
+			} else if (globalBest && globalBest.message && !activeRadioMessage && !hasShownRadioMessage) {
+				// Show message from top player only once per game
+				hasShownRadioMessage = true;
 				activeRadioMessage = { username: globalBest.username, text: globalBest.message };
 				setTimeout(() => {
 					activeRadioMessage = null;
-					// Random cooldown between 20 and 30 seconds
-					radioCooldown = 20 + Math.random() * 10;
 				}, 5000); // Show for 5 seconds
 			}
 
@@ -248,7 +258,7 @@
 
 							// Input handling
 							const isAnyKeyPressed = Object.values(keys).some(k => k);
-							const currentAccel = acceleration * (1 + (mobilityBoostLevel * 0.5));
+							const currentAccel = acceleration;
 							
 							if (isAnyKeyPressed) {
 					
@@ -366,7 +376,6 @@
 					
 						await checkCollisions();
 		}
-		requestAnimationFrame(update);
 	}
 
 	async function fetchLeaderboard() {
@@ -424,6 +433,15 @@
 		}
 	}
 
+	function spawnSatellite() {
+		if (typeof window === 'undefined') return;
+		satellite.x = Math.random() * (window.innerWidth - 100) + 50;
+		satellite.y = Math.random() * (window.innerHeight - 100) + 50;
+		satellite.vx = (Math.random() - 0.5) * 4;
+		satellite.vy = (Math.random() - 0.5) * 4;
+		satellite.exploded = false;
+	}
+
 	onMount(() => {
 		fetchLeaderboard();
 		startSession();
@@ -434,8 +452,8 @@
 			targetPos = { ...charPos };
 			warp.x = window.innerWidth * 0.7;
 			warp.y = window.innerHeight * 0.3;
-			satellite.x = window.innerWidth * 0.5;
-			satellite.y = window.innerHeight * 0.5;
+			
+			spawnSatellite();
 			
 							asteroids = Array.from({ length: 5 }, (_, i) => ({
 							id: i,
@@ -446,10 +464,26 @@
 			
 												meteorites[0].x = Math.random() * (window.innerWidth - 100) + 50;
 												meteorites[0].type = '☄️';
-												spawnMobilityBonus();
+												spawnZapBonus();
 												spawnShieldBonus();
 											}
-														const frame = requestAnimationFrame(update);
+		
+		let lastTime = performance.now();
+		let frame: number;
+
+		async function loop(currentTime: number) {
+			frame = requestAnimationFrame(loop);
+			const deltaTime = currentTime - lastTime;
+			const interval = 1000 / settings.fps;
+
+			if (deltaTime < interval) return;
+			lastTime = currentTime - (deltaTime % interval);
+			
+			await update();
+		}
+
+		frame = requestAnimationFrame(loop);
+
 		return () => {
 			cancelAnimationFrame(frame);
 			clearInterval(pollInterval);
@@ -477,11 +511,39 @@
 		}];
 	}
 
-	function spawnMobilityBonus() {
+	function spawnZapBonus() {
 		if (typeof window === 'undefined') return;
-		mobilityBonus.x = Math.random() * (window.innerWidth - 100) + 50;
-		mobilityBonus.y = Math.random() * (window.innerHeight - 100) + 50;
-		mobilityBonus.active = true;
+		zapBonus.x = Math.random() * (window.innerWidth - 100) + 50;
+		zapBonus.y = Math.random() * (window.innerHeight - 100) + 50;
+		zapBonus.active = true;
+	}
+
+	function zapMeteorite() {
+		if (meteorites.length === 0) return;
+		// Choose a random meteorite
+		const index = Math.floor(Math.random() * meteorites.length);
+		const target = meteorites[index];
+		
+		// Set laser positions starting from player center to target center
+		activeLaser.x1 = charPos.x + charSize / 2;
+		activeLaser.y1 = charPos.y + charSize / 2;
+		activeLaser.x2 = target.x + 30; // Approx center of 4rem meteorite
+		activeLaser.y2 = target.y + 30;
+		
+		const dx = activeLaser.x2 - activeLaser.x1;
+		const dy = activeLaser.y2 - activeLaser.y1;
+		activeLaser.length = Math.sqrt(dx * dx + dy * dy);
+		activeLaser.angle = Math.atan2(dy, dx) * (180 / Math.PI);
+		activeLaser.active = true;
+
+		// Show laser for 200ms
+		setTimeout(() => {
+			activeLaser.active = false;
+			// "Destroy" it by forcing a reset
+			target.y = typeof window !== 'undefined' ? window.innerHeight + 200 : 1000;
+			score += 20;
+			triggerShake();
+		}, 200);
 	}
 
 	function spawnShieldBonus() {
@@ -580,6 +642,8 @@
 			const distance = Math.sqrt(dx * dx + dy * dy);
 			if (distance < (charSize + satelliteSize) / 2.5) {
 				satellite.exploded = true;
+				// Respawn satellite after 5 seconds
+				setTimeout(spawnSatellite, 5000);
 				await handleDeath();
 			}
 		}
@@ -597,17 +661,16 @@
 			}
 		}
 
-		// Check mobility bonus collision
-		if (mobilityBonus.active) {
-			const dx = charPos.x - mobilityBonus.x;
-			const dy = charPos.y - mobilityBonus.y;
+		// Check zap bonus collision
+		if (zapBonus.active) {
+			const dx = charPos.x - zapBonus.x;
+			const dy = charPos.y - zapBonus.y;
 			const distance = Math.sqrt(dx * dx + dy * dy);
 			if (distance < charSize) {
-				mobilityBonus.active = false;
-				mobilityBoostLevel += 1;
-				triggerShake();
+				zapBonus.active = false;
+				zapMeteorite();
 				// Respawn bonus elsewhere
-				setTimeout(spawnMobilityBonus, 1000);
+				setTimeout(spawnZapBonus, 2000);
 			}
 		}
 
@@ -675,22 +738,16 @@
 		gameOver = false;
 		showHighScorePrompt = false;
 		newHighScoreMessage = '';
+		hasShownRadioMessage = false;
 		statusMessage = '';
 		startSession();
-		mobilityBoostLevel = 0;
 		hasShield = false;
 		shieldBonus.active = false;
 		taxCollector.active = false;
 		taxedPopup.active = false;
-		spawnMobilityBonus();
+		spawnZapBonus();
 		spawnShieldBonus();
-		satellite = {
-			x: 400,
-			y: 400,
-			vx: (Math.random() - 0.5) * 2,
-			vy: (Math.random() - 0.5) * 2,
-			exploded: false
-		};
+		spawnSatellite();
 		meteorites = [{
 			id: Math.random(),
 			x: Math.random() * (typeof window !== 'undefined' ? window.innerWidth - 100 : 800) + 50,
@@ -748,76 +805,85 @@
 	onkeyup={handleKeyup}
 />
 
-<div class="game-container" class:shake={isShaking}>
-	{#each particles as p (p.id)}
-		<div
-			class="particle"
-			style="left: {p.x}px; top: {p.y}px; width: {p.size}px; height: {p.size}px; opacity: {p.life};"
-		></div>
-	{/each}
+<div class="game-container">
+	<div class="shake-layer" class:shake={isShaking && settings.enableShake}>
+		{#each particles as p (p.id)}
+			<div
+				class="particle"
+				style="left: {p.x}px; top: {p.y}px; width: {p.size}px; height: {p.size}px; opacity: {p.life};"
+			></div>
+		{/each}
 
-	{#each asteroids as ast (ast.id)}
+		{#each asteroids as ast (ast.id)}
+			<div 
+				class="asteroid"
+				class:exploding={ast.exploded}
+				style="left: {ast.x}px; top: {ast.y}px;"
+			>
+				{ast.exploded ? '✨' : '⭐'}
+			</div>
+		{/each}
+
 		<div 
-			class="asteroid"
-			class:exploding={ast.exploded}
-			style="left: {ast.x}px; top: {ast.y}px;"
+			class="warp-vortex"
+			style="left: {warp.x}px; top: {warp.y}px; width: {warp.size}px; height: {warp.size}px; transform: translate(-50%, -50%) rotate({warp.angle}deg);"
 		>
-			{ast.exploded ? '✨' : '⭐'}
+			<div class="vortex-core">🌀</div>
+			<div class="vortex-ring" style="width: 3072px; height: 3072px;"></div>
+			<div class="gravity-field" style="width: 3072px; height: 3072px;"></div>
 		</div>
-	{/each}
 
-	<div 
-		class="warp-vortex"
-		style="left: {warp.x}px; top: {warp.y}px; width: {warp.size}px; height: {warp.size}px; transform: translate(-50%, -50%) rotate({warp.angle}deg);"
-	>
-		<div class="vortex-core">🌀</div>
-		<div class="vortex-ring" style="width: 3072px; height: 3072px;"></div>
-		<div class="gravity-field" style="width: 3072px; height: 3072px;"></div>
-	</div>
-
-	<div class="character" class:hyper={mobilityBoostLevel > 0} style="left: {charPos.x}px; top: {charPos.y}px; transform: rotate({rotation}deg) {spaghettiScale}; filter: drop-shadow(0 0 {10 + mobilityBoostLevel * 5}px #00f2ff) hue-rotate({mobilityBoostLevel * 45}deg);">
-		{#if hasShield}
-			<div class="shield-effect"></div>
-		{/if}
-		{playerEmoji}
-	</div>
-
-	{#if mobilityBonus.active}
-		<div class="bonus-mobility" style="left: {mobilityBonus.x}px; top: {mobilityBonus.y}px; filter: drop-shadow(0 0 {10 + mobilityBoostLevel * 5}px #00f2ff);">
-			⚡
-		</div>
-	{/if}
-
-	{#if shieldBonus.active}
-		<div class="bonus-shield" style="left: {shieldBonus.x}px; top: {shieldBonus.y}px;">
-			🛡️
-		</div>
-	{/if}
-
-	<div class="satellite" class:exploded={satellite.exploded} style="left: {satellite.x}px; top: {satellite.y}px;">
-		{satellite.exploded ? '💥' : '🛰️'}
-	</div>
-
-	{#each meteorites as m (m.id)}
-		<div class="falling-asteroid" style="left: {m.x}px; top: {m.y}px; transform: rotate({m.angle}deg);">
-			{m.type || '☄️'}
-			{#if m.type && m.type !== '☄️'}
-				<div class="junk-label">Celestial Clutter</div>
+		<div class="character" style="left: {charPos.x}px; top: {charPos.y}px; transform: rotate({rotation}deg) {spaghettiScale}; filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.5));">
+			{#if hasShield}
+				<div class="shield-effect"></div>
 			{/if}
+			{playerEmoji}
 		</div>
-	{/each}
 
-	{#if taxCollector.active}
-		<div class="tax-collector" style="left: {taxCollector.x}px; top: {taxCollector.y}px;">
-			🕴️
-		</div>
-	{/if}
+		{#if zapBonus.active}
+			<div class="bonus-zap" style="left: {zapBonus.x}px; top: {zapBonus.y}px;">
+				📡
+			</div>
+		{/if}
 
-	{#if taxedPopup.active}
-		<div class="taxed-popup" style="left: {taxedPopup.x}px; top: {taxedPopup.y}px; opacity: {taxedPopup.timer / 120}; color: {taxedPopup.text === 'BLOCKED!' ? '#10b981' : '#ff4444'};">
-			{taxedPopup.text}
+		{#if shieldBonus.active}
+			<div class="bonus-shield" style="left: {shieldBonus.x}px; top: {shieldBonus.y}px;">
+				🛡️
+			</div>
+		{/if}
+
+		<div class="satellite" class:exploded={satellite.exploded} style="left: {satellite.x}px; top: {satellite.y}px;">
+			{satellite.exploded ? '💥' : '🛰️'}
 		</div>
-	{/if}
+
+		{#each meteorites as m (m.id)}
+			<div class="falling-asteroid" style="left: {m.x}px; top: {m.y}px; transform: rotate({m.angle}deg);">
+				{m.type || '☄️'}
+				{#if m.type && m.type !== '☄️'}
+					<div class="junk-label">Celestial Clutter</div>
+				{/if}
+			</div>
+		{/each}
+
+		{#if taxCollector.active}
+			<div class="tax-collector" style="left: {taxCollector.x}px; top: {taxCollector.y}px;">
+				🕴️
+			</div>
+		{/if}
+
+		{#if taxedPopup.active}
+			<div class="taxed-popup" style="left: {taxedPopup.x}px; top: {taxedPopup.y}px; opacity: {taxedPopup.timer / 120}; color: {taxedPopup.text === 'BLOCKED!' ? '#10b981' : '#ff4444'};">
+				{taxedPopup.text}
+			</div>
+		{/if}
+
+		{#if activeLaser.active}
+			<div 
+				class="laser-beam" 
+				style="left: {activeLaser.x1}px; top: {activeLaser.y1}px; width: {activeLaser.length}px; transform: rotate({activeLaser.angle}deg);"
+			></div>
+		{/if}
+	</div>
 
 	{#if gameOver}
 		<div class="game-over">
@@ -854,22 +920,21 @@
 		</div>
 	{/if}
 
-	<div class="shooting-stars">
-		{#each stars as star (star.id)}
-			<div
-				class="star"
-				style="--top: {star.top}%; --left: {star.left}%; --delay: {star.delay}s; --duration: {star.duration}s; --angle: {star.angle}deg;"
-			></div>
-		{/each}
-	</div>
+	{#if settings.showBackground}
+		<div class="shooting-stars">
+			{#each stars as star (star.id)}
+				<div
+					class="star"
+					style="--top: {star.top}%; --left: {star.left}%; --delay: {star.delay}s; --duration: {star.duration}s; --angle: {star.angle}deg;"
+				></div>
+			{/each}
+		</div>
+	{/if}
 
 	<div class="score-board">
 		<div class="current-score">Score: {score}</div>
 		{#if globalBest}
 			<div class="global-best">Best: {globalBest.score} ({globalBest.username})</div>
-		{/if}
-		{#if mobilityBoostLevel > 0}
-			<div class="boost-level" style="color: #00f2ff;">Boost: x{mobilityBoostLevel}</div>
 		{/if}
 		{#if lastScores.length > 0}
 			<div class="last-tries">
@@ -904,10 +969,18 @@
 		height: 100vh;
 		position: relative;
 		overflow: hidden;
-		transition: transform 0.1s;
 	}
 
-	.game-container.shake {
+	.shake-layer {
+		width: 100%;
+		height: 100%;
+		position: absolute;
+		top: 0;
+		left: 0;
+		pointer-events: none;
+	}
+
+	.shake-layer.shake {
 		animation: shake 0.3s infinite;
 	}
 
@@ -1083,18 +1156,14 @@
 		transition: filter 0.3s;
 	}
 
-	.character.hyper {
-		filter: drop-shadow(0 0 15px #00f2ff) hue-rotate(180deg);
-	}
-
-	.bonus-mobility {
+	.bonus-zap {
 		position: fixed;
 		font-size: 3rem;
 		z-index: 15;
 		user-select: none;
 		pointer-events: none;
 		animation: pulse-bonus 1s ease-in-out infinite;
-		filter: drop-shadow(0 0 10px #00f2ff);
+		filter: drop-shadow(0 0 10px #6366f1);
 	}
 
 	.bonus-shield {
@@ -1267,6 +1336,17 @@
 	@keyframes taxed-float {
 		0% { transform: translate(-50%, 0); }
 		100% { transform: translate(-50%, -100px); }
+	}
+
+	.laser-beam {
+		position: fixed;
+		height: 4px;
+		background: #00f2ff;
+		box-shadow: 0 0 15px #00f2ff, 0 0 30px #00f2ff;
+		z-index: 100;
+		transform-origin: 0 50%;
+		pointer-events: none;
+		border-radius: 2px;
 	}
 
 	.game-over {

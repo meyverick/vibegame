@@ -24,7 +24,6 @@ function getRedis() {
     const restToken = env.KV_REST_API_TOKEN || process.env.KV_REST_API_TOKEN;
 
     if (url) {
-        console.log('Connecting to Redis via URL...');
         redis = new Redis(url);
         return redis;
     }

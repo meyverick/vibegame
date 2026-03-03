@@ -1,6 +1,23 @@
-<script>
+<script lang="ts">
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
+
+	interface LeaderboardEntry {
+		username: string;
+		score: number;
+		timestamp: number;
+		message?: string;
+	}
+
+	interface Particle {
+		id: number;
+		x: number;
+		y: number;
+		vx: number;
+		vy: number;
+		size: number;
+		life: number;
+	}
 
 	let m = $state({ x: 0, y: 0 });
 	let charPos = $state({ x: 100, y: 100 });
@@ -9,16 +26,15 @@
 	let velocity = $state({ x: 0, y: 0 });
 	let rotation = $state(0);
 	let score = $state(0);
-	/** @type {any} */
-	let globalBest = $state(null);
+	let globalBest: LeaderboardEntry | null = $state(null);
 	let showHighScorePrompt = $state(false);
 	let newHighScoreUsername = $state('');
+	let newHighScoreMessage = $state('');
 	let isSubmitting = $state(false);
 	let sessionToken = $state('');
 	let statusMessage = $state('');
 
-	/** @type {number[]} */
-	let lastScores = $state([]);
+	let lastScores: number[] = $state([]);
 	let gameOver = $state(false);
 	const deathMessages = [
 		'Forgot to pay the gravity bill.',
@@ -34,12 +50,14 @@
 
 	let isShaking = $state(false);
 
+	let activeRadioMessage: { username: string, text: string } | null = $state(null);
+	let radioCooldown = $state(0);
+
 	// Velocity magnitude for panic emoji
 	let velocityMagnitude = $derived(Math.sqrt(velocity.x ** 2 + velocity.y ** 2));
 	let playerEmoji = $derived(velocityMagnitude > 15 ? '😱' : '🚀');
 
-	/** @type {any[]} */
-	let particles = $state([]);
+	let particles: Particle[] = $state([]);
 	let mobilityBoostLevel = $state(0);
 	let mobilityBonus = $state({
 		x: -100,
@@ -109,13 +127,12 @@
 		angle: 0
 	});
 
-	/** @type {Record<string, boolean>} */
-	let keys = {
+	let keys: Record<string, boolean> = $state({
 		ArrowUp: false,
 		ArrowDown: false,
 		ArrowLeft: false,
 		ArrowRight: false
-	};
+	});
 
 	let asteroids = $state(
 		Array.from({ length: 5 }, (_, i) => ({
@@ -165,8 +182,20 @@
 		}
 	}
 
-	function update() {
+	async function update() {
 		if (!gameOver) {
+			if (radioCooldown > 0) {
+				radioCooldown -= 1 / 60; // Approximate seconds
+			} else if (globalBest && globalBest.message && !activeRadioMessage) {
+				// Show message from top player occasionally
+				activeRadioMessage = { username: globalBest.username, text: globalBest.message };
+				setTimeout(() => {
+					activeRadioMessage = null;
+					// Random cooldown between 20 and 30 seconds
+					radioCooldown = 20 + Math.random() * 10;
+				}, 5000); // Show for 5 seconds
+			}
+
 			// Update particles
 			particles = particles
 				.map((p) => ({
@@ -335,7 +364,7 @@
 								rotation += normalizedDiff * 0.1;
 							}
 					
-						checkCollisions();
+						await checkCollisions();
 		}
 		requestAnimationFrame(update);
 	}
@@ -373,7 +402,8 @@
 				body: JSON.stringify({
 					username: newHighScoreUsername,
 					score: score,
-					token: sessionToken
+					token: sessionToken,
+					message: newHighScoreMessage
 				})
 			});
 			
@@ -381,6 +411,7 @@
 			
 			if (res.ok) {
 				showHighScorePrompt = false;
+				newHighScoreMessage = '';
 				await fetchLeaderboard();
 			} else {
 				statusMessage = data.error || 'Submission failed';
@@ -473,7 +504,7 @@
 		return 'scale(1, 1)';
 	});
 
-	function checkCollisions() {
+	async function checkCollisions() {
 		if (typeof window === 'undefined' || gameOver) return;
 		
 		const charCenterX = charPos.x + charSize / 2;
@@ -507,7 +538,7 @@
 			}
 		}
 
-		const handleDeath = () => {
+		const handleDeath = async () => {
 			if (hasShield) {
 				hasShield = false;
 				triggerShake();
@@ -518,6 +549,9 @@
 			gameOver = true;
 			currentDeathMessage = deathMessages[Math.floor(Math.random() * deathMessages.length)];
 			
+			// Fetch absolute latest leaderboard to ensure we don't use stale polling data
+			await fetchLeaderboard();
+
 			// Check for global high score
 			if (!globalBest || score > globalBest.score) {
 				showHighScorePrompt = true;
@@ -536,7 +570,7 @@
 		const distW = Math.sqrt(dxW * dxW + dyW * dyW);
 
 		if (distW < 40) {
-			handleDeath();
+			await handleDeath();
 		}
 
 		// Check satellite collision
@@ -546,22 +580,22 @@
 			const distance = Math.sqrt(dx * dx + dy * dy);
 			if (distance < (charSize + satelliteSize) / 2.5) {
 				satellite.exploded = true;
-				handleDeath();
+				await handleDeath();
 			}
 		}
 
 		// Check meteorites collision
-		meteorites.forEach(m => {
+		for (const m of meteorites) {
 			const dx = charCenterX - (m.x + 30); // Approx center of 4rem meteorite
 			const dy = charCenterY - (m.y + 30);
 			const distance = Math.sqrt(dx * dx + dy * dy);
 			if (distance < (charSize + 40) / 2) {
-				if (handleDeath()) {
+				if (await handleDeath()) {
 					// "Destroy" the meteorite by pushing it off-screen so it resets
 					m.y = window.innerHeight + 200;
 				}
 			}
-		});
+		}
 
 		// Check mobility bonus collision
 		if (mobilityBonus.active) {
@@ -640,6 +674,7 @@
 		score = 0;
 		gameOver = false;
 		showHighScorePrompt = false;
+		newHighScoreMessage = '';
 		statusMessage = '';
 		startSession();
 		mobilityBoostLevel = 0;
@@ -670,7 +705,7 @@
 	/**
 	 * @param {MouseEvent} event
 	 */
-	function handleMousemove(event) {
+	function handleMousemove(event: MouseEvent) {
 		m.x = event.clientX;
 		m.y = event.clientY;
 	}
@@ -678,7 +713,7 @@
 	/**
 	 * @param {PointerEvent} event
 	 */
-	function handlePointerDown(event) {
+	function handlePointerDown(event: PointerEvent) {
 		// Prevent click handling if we're clicking the navigation
 		if (event.target instanceof HTMLAnchorElement) return;
 		
@@ -690,7 +725,7 @@
 	/**
 	 * @param {KeyboardEvent} event
 	 */
-	function handleKeydown(event) {
+	function handleKeydown(event: KeyboardEvent) {
 		if (event.key in keys) {
 			keys[event.key] = true;
 		}
@@ -699,7 +734,7 @@
 	/**
 	 * @param {KeyboardEvent} event
 	 */
-	function handleKeyup(event) {
+	function handleKeyup(event: KeyboardEvent) {
 		if (event.key in keys) {
 			keys[event.key] = false;
 		}
@@ -793,8 +828,15 @@
 					<input 
 						type="text" 
 						bind:value={newHighScoreUsername} 
-						placeholder="Enter your pilot name"
+						placeholder="Pilot Name"
 						maxlength="20"
+						disabled={isSubmitting}
+					/>
+					<input 
+						type="text" 
+						bind:value={newHighScoreMessage} 
+						placeholder="Attach radio message (Optional)"
+						maxlength="100"
 						disabled={isSubmitting}
 					/>
 					{#if statusMessage}
@@ -838,6 +880,13 @@
 			</div>
 		{/if}
 	</div>
+
+	{#if activeRadioMessage}
+		<div class="radio-transmission">
+			<div class="radio-header">INCOMING TRANSMISSION: {activeRadioMessage.username}</div>
+			<div class="radio-body">"{activeRadioMessage.text}"</div>
+		</div>
+	{/if}
 
 	<main>
 		<h1>about</h1>
@@ -961,6 +1010,42 @@
 		color: #ef4444;
 		font-size: 0.9rem;
 		margin: 0;
+	}
+
+	.radio-transmission {
+		position: fixed;
+		bottom: 10%;
+		left: 50%;
+		transform: translateX(-50%);
+		width: 80%;
+		max-width: 600px;
+		background: rgba(0, 0, 0, 0.6);
+		padding: 1.5rem 2rem;
+		border-left: 4px solid #10b981;
+		color: white;
+		font-family: 'Courier New', Courier, monospace;
+		z-index: 500;
+		animation: radio-in 0.5s ease-out;
+		backdrop-filter: blur(4px);
+		box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+	}
+
+	.radio-header {
+		font-size: 0.7rem;
+		color: #10b981;
+		margin-bottom: 0.5rem;
+		letter-spacing: 2px;
+		font-weight: bold;
+	}
+
+	.radio-body {
+		font-size: 1.2rem;
+		line-height: 1.4;
+	}
+
+	@keyframes radio-in {
+		from { opacity: 0; transform: translate(-50%, 20px); }
+		to { opacity: 1; transform: translate(-50%, 0); }
 	}
 
 	.last-tries {

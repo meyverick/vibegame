@@ -2,17 +2,25 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import sign from '../images/sign.png';
 
+	interface DustParticle {
+		id: number;
+		x: number;
+		y: number;
+		vx: number;
+		vy: number;
+		life: number;
+	}
+
 	let { children } = $props();
 	let isMenuOpen = $state(false);
-	/** @type {any[]} */
-	let dustParticles = $state([]);
+	let dustParticles: DustParticle[] = $state([]);
 
 	function toggleMenu() {
 		isMenuOpen = !isMenuOpen;
 	}
 
 	/** @param {PointerEvent} e */
-	function handlePointerMove(e) {
+	function handlePointerMove(e: PointerEvent) {
 		if (Math.random() > 0.3) return; // Limit density
 		const id = Math.random();
 		dustParticles = [

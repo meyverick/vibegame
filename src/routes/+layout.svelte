@@ -84,7 +84,7 @@
 		{#if isMenuOpen}
 			<nav class="dropdown-menu">
 				<a href="/" onclick={() => (isMenuOpen = false)}>home</a>
-				<a href="/about" onclick={() => (isMenuOpen = false)}>about</a>
+				<a href="/play" onclick={() => (isMenuOpen = false)}>play</a>
 				<div class="menu-divider"></div>
 				<div class="settings-panel">
 					<label class="checkbox-label">

@@ -134,7 +134,7 @@
 			<button onclick={resetGame}>Try Again</button>
 		</div>
 	{:else}
-		<a href="/about" class="play-link">ENTER MISSION SECTOR ➔</a>
+		<a href="/play" class="play-link">ENTER MISSION SECTOR ➔</a>
 	{/if}
 </main>
 

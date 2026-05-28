@@ -164,6 +164,16 @@
 		y: -100,
 		active: false,
 		vx: 0,
+		vy: 0,
+		catches: 0,
+		cooldown: 0
+	});
+
+	let policeman = $state({
+		x: -100,
+		y: -100,
+		active: false,
+		vx: 0,
 		vy: 0
 	});
 
@@ -354,10 +364,15 @@
 				if (taxedPopup.timer <= 0) taxedPopup.active = false;
 			}
 
+			if (taxCollector.cooldown > 0) {
+				taxCollector.cooldown -= 1 * timeScale;
+			}
+
 			// Tax Collector Spawning (randomly every ~10 seconds)
-			if (!taxCollector.active && Math.random() < 0.002) {
+			if (!taxCollector.active && taxCollector.cooldown <= 0 && Math.random() < 0.01) {
 				const side = Math.floor(Math.random() * 4);
 				if (typeof window !== 'undefined') {
+					console.log('Spawning Tax Collector and Policeman');
 					if (side === 0) {
 						taxCollector.x = Math.random() * window.innerWidth;
 						taxCollector.y = -50;
@@ -371,7 +386,28 @@
 						taxCollector.x = -50;
 						taxCollector.y = Math.random() * window.innerHeight;
 					}
+					taxCollector.vx = 0;
+					taxCollector.vy = 0;
 					taxCollector.active = true;
+
+					// Policeman spawns at a random side
+					const pSide = Math.floor(Math.random() * 4);
+					if (pSide === 0) {
+						policeman.x = Math.random() * window.innerWidth;
+						policeman.y = -50;
+					} else if (pSide === 1) {
+						policeman.x = window.innerWidth + 50;
+						policeman.y = Math.random() * window.innerHeight;
+					} else if (pSide === 2) {
+						policeman.x = Math.random() * window.innerWidth;
+						policeman.y = window.innerHeight + 50;
+					} else {
+						policeman.x = -50;
+						policeman.y = Math.random() * window.innerHeight;
+					}
+					policeman.vx = 0;
+					policeman.vy = 0;
+					policeman.active = true;
 				}
 			}
 
@@ -386,6 +422,28 @@
 				taxCollector.x += taxCollector.vx * timeScale;
 				taxCollector.y += taxCollector.vy * timeScale;
 
+				if (policeman.active) {
+					const pdx = taxCollector.x - policeman.x;
+					const pdy = taxCollector.y - policeman.y;
+					const pAngle = Math.atan2(pdy, pdx);
+					// Policeman is a bit faster to eventually catch tax man
+					policeman.vx += Math.cos(pAngle) * 0.12 * timeScale;
+					policeman.vy += Math.sin(pAngle) * 0.12 * timeScale;
+					policeman.vx *= 1 - (1 - 0.98) * timeScale;
+					policeman.vy *= 1 - (1 - 0.98) * timeScale;
+					policeman.x += policeman.vx * timeScale;
+					policeman.y += policeman.vy * timeScale;
+
+					// Catch check
+					const catchDist = Math.sqrt(pdx * pdx + pdy * pdy);
+					if (catchDist < 40) {
+						taxCollector.active = false;
+						taxCollector.catches += 1;
+						taxCollector.cooldown = 300; // 10 seconds at 30fps
+						policeman.active = false;
+					}
+				}
+
 				// Despawn if too far away
 				if (typeof window !== 'undefined') {
 					if (
@@ -395,6 +453,7 @@
 						taxCollector.y > window.innerHeight + 200
 					) {
 						taxCollector.active = false;
+						policeman.active = false;
 					}
 				}
 			}
@@ -872,6 +931,7 @@
 			const dist = Math.sqrt(dx * dx + dy * dy);
 			if (dist < 40) {
 				taxCollector.active = false;
+				policeman.active = false;
 				triggerShake();
 
 				if (hasShield) {
@@ -1086,6 +1146,9 @@
 		hasShield = false;
 		shieldBonus.active = false;
 		taxCollector.active = false;
+		taxCollector.catches = 0;
+		taxCollector.cooldown = 0;
+		policeman.active = false;
 		taxedPopup.active = false;
 		tower.active = false;
 		tower.level = 0;
@@ -1250,7 +1313,14 @@
 		{/each}
 
 		{#if taxCollector.active}
-			<div class="tax-collector" style="left: {taxCollector.x}px; top: {taxCollector.y}px;">🕴️</div>
+			<div class="tax-collector" style="left: {taxCollector.x}px; top: {taxCollector.y}px;">
+				🕴️
+				<div class="tax-counter">{taxCollector.catches}</div>
+			</div>
+		{/if}
+
+		{#if policeman.active}
+			<div class="policeman" style="left: {policeman.x}px; top: {policeman.y}px;">👮</div>
 		{/if}
 
 		{#if taxedPopup.active}
@@ -2339,11 +2409,36 @@
 	.tax-collector {
 		position: fixed;
 		font-size: 4rem;
-		z-index: 145;
+		z-index: 500;
 		user-select: none;
 		pointer-events: none;
 		filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.4));
 		animation: collector-wobble 2s ease-in-out infinite;
+	}
+
+	.tax-counter {
+		position: absolute;
+		top: 0;
+		right: 0;
+		background: #ff4444;
+		color: white;
+		font-size: 1rem;
+		font-weight: bold;
+		padding: 2px 6px;
+		border-radius: 50%;
+		border: 2px solid white;
+		box-shadow: 0 0 10px rgba(0,0,0,0.5);
+		z-index: 501;
+	}
+
+	.policeman {
+		position: fixed;
+		font-size: 4rem;
+		z-index: 500;
+		user-select: none;
+		pointer-events: none;
+		filter: drop-shadow(0 0 20px rgba(0, 100, 255, 0.6));
+		animation: collector-wobble 1.5s ease-in-out infinite reverse;
 	}
 
 	@keyframes collector-wobble {
